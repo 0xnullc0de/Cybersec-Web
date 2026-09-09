@@ -76,6 +76,11 @@ export default function Footer() {
                   &gt; /about-whoami
                 </Link>
               </li>
+              <li>
+                <Link href="/admin" className="text-gray-500 hover:text-[#00ff66] transition-colors">
+                  &gt; /admin-vault
+                </Link>
+              </li>
             </ul>
           </div>
 
