@@ -1,0 +1,250 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-primary: #050708;
+  --bg-secondary: #090d10;
+  --bg-card: #0a0f14;
+  --bg-card-hover: #0e161d;
+  --border-color: #1b2631;
+  --text-main: #e6edf3;
+  --text-muted: #8b949e;
+  --accent-green: #00ff66;
+  --accent-glow: rgba(0, 255, 102, 0.15);
+}
+
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-main);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  overflow-x: hidden;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Custom Cyber Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #090d10;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1b2631;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #00ff66;
+}
+
+/* Selection Highlight */
+::selection {
+  background-color: rgba(0, 255, 102, 0.25);
+  color: #00ff66;
+}
+
+/* Cyber Grid Background */
+.cyber-grid {
+  background-image: 
+    linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* Terminal Code styling */
+code, pre {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+/* ==========================================================================
+   LIGHT MODE OVERRIDES
+   Activates ONLY when html has class 'light' and does NOT have class 'dark'
+   ========================================================================== */
+html.light:not(.dark) {
+  --bg-primary: #f8fafc;
+  --bg-secondary: #ffffff;
+  --bg-card: #ffffff;
+  --bg-card-hover: #f1f5f9;
+  --border-color: #e2e8f0;
+  --text-main: #0f172a;
+  --text-muted: #475569;
+  --accent-green: #059669;
+}
+
+html.light:not(.dark) body {
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+/* Light mode grid pattern */
+html.light:not(.dark) .cyber-grid {
+  background-image: 
+    linear-gradient(to right, rgba(0, 0, 0, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.04) 1px, transparent 1px) !important;
+}
+
+/* Light mode Navbar */
+html.light:not(.dark) header {
+  background-color: rgba(255, 255, 255, 0.88) !important;
+  border-color: #e2e8f0 !important;
+}
+
+html.light:not(.dark) header .text-white {
+  color: #0f172a !important;
+}
+
+html.light:not(.dark) header .bg-\[\#0e141a\],
+html.light:not(.dark) header .bg-\[\#0a1015\] {
+  background-color: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+}
+
+html.light:not(.dark) header .text-gray-300 {
+  color: #334155 !important;
+}
+
+/* Light mode Cards & Containers */
+html.light:not(.dark) .bg-\[\#0a0f14\],
+html.light:not(.dark) .bg-\[\#0a0f13\],
+html.light:not(.dark) .bg-\[\#080c10\],
+html.light:not(.dark) .bg-\[\#070b0e\],
+html.light:not(.dark) .bg-\[\#0a1117\] {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.05), 0 2px 6px -1px rgba(0, 0, 0, 0.02) !important;
+}
+
+/* Light mode Secondary Boxes & Pills */
+html.light:not(.dark) .bg-\[\#0e151b\],
+html.light:not(.dark) .bg-\[\#0e161c\],
+html.light:not(.dark) .bg-\[\#121920\],
+html.light:not(.dark) .bg-\[\#141d26\],
+html.light:not(.dark) .bg-\[\#0d141a\],
+html.light:not(.dark) .bg-\[\#111820\],
+html.light:not(.dark) .bg-\[\#141c24\],
+html.light:not(.dark) .bg-\[\#080c0f\] {
+  background-color: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+}
+
+/* Light mode Text Colors */
+html.light:not(.dark) .text-white {
+  color: #0f172a !important;
+}
+
+html.light:not(.dark) .text-gray-200,
+html.light:not(.dark) .text-gray-300 {
+  color: #334155 !important;
+}
+
+html.light:not(.dark) .text-gray-400 {
+  color: #475569 !important;
+}
+
+html.light:not(.dark) .text-gray-500 {
+  color: #64748b !important;
+}
+
+/* Light mode Borders */
+html.light:not(.dark) .border-\[\#1b2631\],
+html.light:not(.dark) .border-\[\#17222c\],
+html.light:not(.dark) .border-\[\#17212a\],
+html.light:not(.dark) .border-\[\#22313f\],
+html.light:not(.dark) .border-\[\#18232c\],
+html.light:not(.dark) .border-\[\#1e2933\],
+html.light:not(.dark) .border-\[\#1e2a36\],
+html.light:not(.dark) .border-\[\#202e3b\] {
+  border-color: #e2e8f0 !important;
+}
+
+/* Light mode Footer */
+html.light:not(.dark) footer {
+  background-color: #f1f5f9 !important;
+  border-color: #e2e8f0 !important;
+}
+
+/* Light mode Scrollbar */
+html.light:not(.dark) ::-webkit-scrollbar-track {
+  background: #f1f5f9 !important;
+}
+
+html.light:not(.dark) ::-webkit-scrollbar-thumb {
+  background: #cbd5e1 !important;
+}
+
+html.light:not(.dark) ::-webkit-scrollbar-thumb:hover {
+  background: #059669 !important;
+}
+
+/* ==========================================================================
+   PRINT / PDF DARK MODE RULES
+   Ensures exported PDF and printouts are in rich cyberpunk dark mode!
+   ========================================================================== */
+@media print {
+  @page {
+    margin: 1.2cm;
+    size: auto;
+  }
+
+  nav, footer, .no-print {
+    display: none !important;
+  }
+
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+
+  html, body {
+    background-color: #050708 !important;
+    color: #e6edf3 !important;
+  }
+
+  article {
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    max-width: 100% !important;
+  }
+
+  header.p-6,
+  header.p-8 {
+    background-color: #0a0f14 !important;
+    border: 1px solid #1b2631 !important;
+    color: #ffffff !important;
+  }
+
+  .print-clean {
+    border: 1px solid #1b2631 !important;
+    background-color: #080c10 !important;
+  }
+
+  /* Code block styling in dark print */
+  pre {
+    background-color: #05070a !important;
+    color: #e6edf3 !important;
+    border: 1px solid #1b2631 !important;
+  }
+
+  .bg-\[\#06090c\],
+  .bg-\[\#0d141b\] {
+    background-color: #0d141b !important;
+    color: #ffffff !important;
+  }
+
+  .text-white {
+    color: #ffffff !important;
+  }
+
+  .text-gray-300 {
+    color: #d1d5db !important;
+  }
+
+  .text-gray-400 {
+    color: #9ca3af !important;
+  }
+}
