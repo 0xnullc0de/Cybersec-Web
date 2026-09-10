@@ -7,12 +7,12 @@ export const siteConfig: SiteConfig = {
   bio: "Specializing in Active Directory attack paths, internal network penetration testing, and web exploitation. Documenting adversary tradecraft and CTF machine writeups with zero fluff.",
   statusBadge: "Active Offensive Security Researcher & CTF Competitor",
   socials: {
-    github: "https://github.com/Nullbyt3",
-    linkedin: "https://linkedin.com/in/Nullbyt3",
+    github: "https://github.com/0xnullc0de",
+    linkedin: "https://www.linkedin.com/in/maxwell-wachira-05b991344/",
     twitter: "https://twitter.com/Nullbyt3_sec",
-    htb: "https://app.hackthebox.com/profile/Nullbyt3",
+    htb: "https://app.hackthebox.com/users/2029291",
     thm: "https://tryhackme.com/p/Nullbyt3",
-    email: "contact@Nullbyt3.io",
+    email: "maxwellwachira100@gmail.com",
   },
   stats: {
     htbRank: "Pro Hacker (#412 Global)",
