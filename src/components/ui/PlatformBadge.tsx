@@ -18,6 +18,14 @@ export default function PlatformBadge({ platform, size = 'md' }: PlatformBadgePr
           icon: Box,
           label: 'Hack The Box',
         };
+      case 'HTB Pro Lab':
+        return {
+          bg: 'bg-purple-500/15',
+          border: 'border-purple-500/40',
+          text: 'text-purple-400',
+          icon: ShieldAlert,
+          label: 'HTB Pro Lab',
+        };
       case 'THM':
         return {
           bg: 'bg-[#ff2d55]/10',

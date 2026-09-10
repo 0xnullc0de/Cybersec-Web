@@ -55,6 +55,10 @@ export default function Navbar() {
     { name: 'About / Whoami', href: '/about', icon: User },
   ];
 
+  if (pathname?.startsWith('/admin')) {
+    return null;
+  }
+
   return (
     <header
       className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${

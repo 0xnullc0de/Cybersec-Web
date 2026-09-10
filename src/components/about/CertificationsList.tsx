@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect } from 'react';
 import CertCard from './CertCard';
-import AddCertificateModal from './AddCertificateModal';
 import { Certification } from '@/types';
 import { certifications as fallbackCerts } from '@/data/certifications';
 
@@ -28,20 +27,14 @@ export default function CertificationsList({ initialCerts = fallbackCerts }: Cer
       .finally(() => setLoading(false));
   }, []);
 
-  const handleCertificateAdded = (newCert: Certification) => {
-    setCerts((prev) => [newCert, ...prev]);
-  };
-
   return (
     <div className="space-y-6">
-      {/* Action Bar */}
+      {/* Status Bar */}
       <div className="flex items-center justify-between">
         <div className="font-mono text-xs text-gray-400">
-          <span>STORED CREDENTIALS:</span>{' '}
+          <span>VERIFIED CREDENTIALS:</span>{' '}
           <strong className="text-[#00ff66]">{certs.length}</strong>
         </div>
-
-        <AddCertificateModal onCertificateAdded={handleCertificateAdded} />
       </div>
 
       {/* Grid of Certs */}

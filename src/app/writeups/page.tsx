@@ -8,7 +8,6 @@ import SectionHeader from '@/components/ui/SectionHeader';
 import PlatformBadge from '@/components/ui/PlatformBadge';
 import DifficultyBadge from '@/components/ui/DifficultyBadge';
 import Link from 'next/link';
-import SyncButton from '@/components/admin/SyncButton';
 import { Terminal, Shield, Lock, CheckCircle2, ArrowRight, RotateCcw } from 'lucide-react';
 
 export default function WriteupsPage() {
@@ -58,8 +57,13 @@ export default function WriteupsPage() {
       }
 
       // 2. Platform filter
-      if (selectedPlatform !== 'All' && w.platform !== selectedPlatform) {
-        return false;
+      if (selectedPlatform !== 'All') {
+        if (selectedPlatform === 'HTB Pro Lab' && !w.isProLab && w.platform !== 'HTB Pro Lab') {
+          return false;
+        }
+        if (selectedPlatform !== 'HTB Pro Lab' && w.platform !== selectedPlatform) {
+          return false;
+        }
       }
 
       // 3. Difficulty filter
@@ -68,10 +72,13 @@ export default function WriteupsPage() {
       }
 
       // 4. Status filter
-      if (selectedStatus === 'retired' && !w.isRetired) {
+      if (selectedStatus === 'pro-lab' && !w.isProLab) {
         return false;
       }
-      if (selectedStatus === 'active' && w.isRetired) {
+      if (selectedStatus === 'retired' && (!w.isRetired || w.isProLab)) {
+        return false;
+      }
+      if (selectedStatus === 'active' && (w.isRetired || w.isProLab)) {
         return false;
       }
 
@@ -82,7 +89,7 @@ export default function WriteupsPage() {
 
       return true;
     });
-  }, [searchQuery, selectedPlatform, selectedDifficulty, selectedStatus, selectedTag]);
+  }, [allWriteups, searchQuery, selectedPlatform, selectedDifficulty, selectedStatus, selectedTag]);
 
   const hasActiveFilters =
     searchQuery !== '' ||
@@ -105,10 +112,10 @@ export default function WriteupsPage() {
       <SectionHeader
         badge="OFFENSIVE VAULT"
         title="CTF & LAB EXPLOITATION WRITEUPS"
-        description="Comprehensive, step-by-step penetration testing walkthroughs covering Hack The Box, TryHackMe, and Proving Grounds machines with complete privilege escalation chains."
+        description="Comprehensive, step-by-step penetration testing walkthroughs covering Hack The Box machines, HTB Pro Labs, and TryHackMe networks with complete privilege escalation chains."
       />
 
-      {/* Sync Bar & Source Indicator */}
+      {/* Datastore Status Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6 p-3 rounded-xl bg-[#0a0f14] border border-[#1b2631]">
         <div className="flex items-center gap-2 font-mono text-xs text-gray-400">
           <span className="w-2 h-2 rounded-full bg-[#00ff66] animate-pulse" />
@@ -116,15 +123,15 @@ export default function WriteupsPage() {
           <strong className="text-white">SUPABASE POSTGRESQL &amp; STORAGE</strong>
         </div>
 
-        <SyncButton
-          onSyncComplete={() => {
-            fetch('/api/writeups')
-              .then((res) => res.json())
-              .then((data) => {
-                if (Array.isArray(data) && data.length > 0) setAllWriteups(data);
-              });
-          }}
-        />
+        <div className="flex items-center gap-3 font-mono text-xs">
+          <span className="text-gray-400">
+            TOTAL WRITEUPS: <strong className="text-[#00ff66]">{allWriteups.length}</strong>
+          </span>
+          <span className="text-gray-600">|</span>
+          <span className="text-purple-400">
+            PRO LABS: <strong>{allWriteups.filter(w => w.isProLab).length}</strong>
+          </span>
+        </div>
       </div>
 
       {/* Filter and Search Bar */}

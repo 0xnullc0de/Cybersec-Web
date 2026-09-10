@@ -267,7 +267,10 @@ export async function syncNotionToWriteups(): Promise<SyncStats> {
         // Extract Title
         let title = 'Untitled Writeup';
         if (props.Title?.title) title = getPlainText(props.Title.title);
+        else if (props.title?.title) title = getPlainText(props.title.title);
         else if (props.Name?.title) title = getPlainText(props.Name.title);
+        else if (props.name?.title) title = getPlainText(props.name.title);
+        else if (page.title) title = getPlainText(page.title);
 
         if (!title || title === 'Untitled Writeup') continue;
 
@@ -414,4 +417,169 @@ export async function syncNotionToWriteups(): Promise<SyncStats> {
     stats.errors.push(apiErr.message);
     return stats;
   }
+}
+
+/**
+ * Lists all pages accessible in the Notion workspace so the user can select which to import.
+ */
+export async function listNotionPages(): Promise<any[]> {
+  const token = getNotionToken();
+  if (!token) return [];
+  const notion = new Client({ auth: token });
+  try {
+    const searchRes = await notion.search({
+      filter: { property: 'object', value: 'page' },
+      page_size: 100,
+    });
+
+    return searchRes.results.map((page: any) => {
+      const props = page.properties || {};
+      let title = 'Untitled Page';
+      if (props.Title?.title) title = getPlainText(props.Title.title);
+      else if (props.title?.title) title = getPlainText(props.title.title);
+      else if (props.Name?.title) title = getPlainText(props.Name.title);
+      else if (props.name?.title) title = getPlainText(props.name.title);
+      else if (page.title) title = getPlainText(page.title);
+
+      return {
+        id: page.id,
+        title: title || 'Untitled',
+        createdTime: page.created_time,
+        lastEditedTime: page.last_edited_time,
+        url: page.url,
+      };
+    });
+  } catch (e: any) {
+    console.error('listNotionPages error:', e);
+    return [];
+  }
+}
+
+/**
+ * Selectively imports a single Notion page into Supabase with optional user overrides
+ * (e.g. marking as HTB Pro Lab, assigning custom unlock passphrase).
+ */
+export async function importSingleNotionPage(
+  pageId: string,
+  overrides: {
+    title?: string;
+    slug?: string;
+    isProLab?: boolean;
+    platform?: string;
+    difficulty?: string;
+    os?: string;
+    tags?: string[];
+    unlockPassword?: string;
+    summary?: string;
+  } = {}
+) {
+  const token = getNotionToken();
+  if (!token) throw new Error('Notion token not configured');
+  if (!supabaseAdmin) throw new Error('SUPABASE_SERVICE_ROLE_KEY required');
+
+  const notion = new Client({ auth: token });
+  const page: any = await notion.pages.retrieve({ page_id: pageId });
+  const props = page.properties || {};
+
+  // Resolve title
+  let title = overrides.title?.trim();
+  if (!title) {
+    if (props.Title?.title) title = getPlainText(props.Title.title);
+    else if (props.title?.title) title = getPlainText(props.title.title);
+    else if (props.Name?.title) title = getPlainText(props.Name.title);
+    else if (props.name?.title) title = getPlainText(props.name.title);
+    else if (page.title) title = getPlainText(page.title);
+  }
+  if (!title) title = 'Untitled Writeup';
+
+  // Resolve slug
+  const isProLab = Boolean(overrides.isProLab);
+  const platform = overrides.platform || (isProLab ? 'HTB Pro Lab' : (props.Platform?.select?.name || 'HTB'));
+  const difficulty = overrides.difficulty || props.Difficulty?.select?.name || (isProLab ? 'Hard' : 'Medium');
+  const os = overrides.os || props.OS?.select?.name || (isProLab ? 'Active Directory' : 'Linux');
+  const tags = overrides.tags || props.Tags?.multi_select?.map((t: any) => t.name) || [isProLab ? 'Pro Lab' : 'CTF'];
+  const summary = overrides.summary || getPlainText(props.Summary?.rich_text) || `${title} enterprise walkthrough.`;
+
+  const slug = (overrides.slug || `${platform.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`)
+    .replace(/(^-|-$)/g, '');
+
+  // Parse blocks and re-host images
+  const rehostedImages: string[] = [];
+  const fullMarkdown = await parseNotionBlocksToMarkdown(notion, pageId, slug, rehostedImages);
+
+  // Split preview content
+  let previewContent = fullMarkdown;
+  if (fullMarkdown.includes('---')) {
+    previewContent = fullMarkdown.split('---')[0].trim();
+  } else if (fullMarkdown.includes('## 2.')) {
+    previewContent = fullMarkdown.split('## 2.')[0].trim();
+  }
+
+  // Generate dark-mode PDF
+  let pdfPath: string | null = null;
+  try {
+    pdfPath = await uploadWriteupPdfToSupabase({
+      slug,
+      title,
+      platform,
+      difficulty,
+      os,
+      datePublished: page.created_time?.split('T')[0] || new Date().toISOString().split('T')[0],
+      summary,
+      initialAccessVector: 'See full exploitation chain in lab report.',
+      privEscVector: 'Domain compromise / Enterprise forest persistence.',
+      content: fullMarkdown,
+    });
+  } catch (pdfErr) {
+    console.warn(`PDF generation skipped for ${slug}:`, pdfErr);
+  }
+
+  // Password setup: for Pro Labs or locked writeups
+  const unlockPassword = overrides.unlockPassword?.trim() || (isProLab ? `HTB{${title.replace(/[^a-zA-Z0-9]/g, '')}_ProLab_Enterprise_Pwned!}` : '');
+  let passwordHash: string | null = null;
+  if (unlockPassword) {
+    passwordHash = await bcrypt.hash(unlockPassword, 10);
+  }
+
+  const writeupRecord = {
+    slug,
+    title,
+    platform,
+    difficulty,
+    os,
+    tags,
+    date_published: page.created_time?.split('T')[0] || new Date().toISOString().split('T')[0],
+    is_retired: !isProLab, // Pro labs are NEVER retired by default
+    is_pro_lab: isProLab,
+    points: isProLab ? 100 : 30,
+    summary,
+    initial_access_vector: isProLab ? 'Enterprise network entry vector' : 'Reconnaissance & initial foothold',
+    priv_esc_vector: isProLab ? 'Domain persistence & forest privilege escalation' : 'Root / System privilege escalation',
+    preview_content: previewContent,
+    full_content: fullMarkdown,
+    password_hash: passwordHash,
+    unlock_password: unlockPassword || null,
+    pdf_path: pdfPath,
+    image_paths: rehostedImages,
+    notion_page_id: pageId,
+    notion_last_edited_time: page.last_edited_time,
+    updated_at: new Date().toISOString(),
+  };
+
+  const { data, error } = await supabaseAdmin!
+    .from('writeups')
+    .upsert(writeupRecord, { onConflict: 'slug' })
+    .select()
+    .single();
+
+  if (error) {
+    throw new Error(`Failed to save to Supabase: ${error.message}`);
+  }
+
+  return {
+    success: true,
+    writeup: data,
+    imagesRehosted: rehostedImages.length,
+    pdfGenerated: Boolean(pdfPath),
+  };
 }

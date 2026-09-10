@@ -194,15 +194,21 @@ export async function generateWriteupPdfBuffer(data: PdfWriteupData): Promise<Bu
       }
 
       // Footer
-      const totalPages = doc.bufferedPageRange().count;
-      for (let p = 0; p < totalPages; p++) {
-        doc.switchToPage(p);
-        doc.fontSize(7).fillColor('#4b5563').text(
-          `Nulbyt3 Offensive Security Vault  •  Page ${p + 1} of ${totalPages}  •  Classified Lab Walkthrough`,
-          40,
-          pageHeight - 25,
-          { align: 'center', width: pageWidth - 80 }
-        );
+      try {
+        const range = doc.bufferedPageRange();
+        for (let p = range.start; p < range.start + range.count; p++) {
+          try {
+            doc.switchToPage(p);
+            doc.fontSize(7).fillColor('#4b5563').text(
+              `Nulbyt3 Offensive Security Vault  •  Page ${p - range.start + 1} of ${range.count}  •  Classified Lab Walkthrough`,
+              40,
+              pageHeight - 25,
+              { align: 'center', width: pageWidth - 80 }
+            );
+          } catch (e) {}
+        }
+      } catch (footerErr) {
+        console.warn('PDF footer numbering skipped:', footerErr);
       }
 
       doc.end();

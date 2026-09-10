@@ -43,10 +43,11 @@ export default function FilterBar({
   totalCount,
   filteredCount,
 }: FilterBarProps) {
-  const platforms = ['All', 'HTB', 'THM'];
+  const platforms = ['All', 'HTB', 'HTB Pro Lab', 'THM'];
   const difficulties = ['All', 'Easy', 'Medium', 'Hard'];
   const statuses = [
     { label: 'All Status', value: 'all' },
+    { label: '🏢 Pro Labs (Locked)', value: 'pro-lab' },
     { label: '✓ Retired (Full)', value: 'retired' },
     { label: '🔒 Active (Preview)', value: 'active' },
   ];

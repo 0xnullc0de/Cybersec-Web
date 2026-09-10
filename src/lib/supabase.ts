@@ -3,10 +3,12 @@ import { Writeup, Certification } from '@/types';
 import { writeups as fallbackWriteups } from '@/data/writeups';
 import { certifications as fallbackCerts } from '@/data/certifications';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://bhtzmnhmdlmsuxivwgua.supabase.co';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const DEFAULT_SUPABASE_URL = 'https://bhtzmnhmdlmsuxivwgua.supabase.co';
+const DEFAULT_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJodHptbmhtZGxtc3V4aXZ3Z3VhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg0MDIwNzEsImV4cCI6MjEwMzk3ODA3MX0.ub5aHUHbTpLc6tvzcFVuCp8CE6JpOqXi9NBCDpIXKbg';
 
-if (!supabaseAnonKey) throw new Error('NEXT_PUBLIC_SUPABASE_ANON_KEY is required');
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || DEFAULT_SUPABASE_URL;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || DEFAULT_ANON_KEY;
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || DEFAULT_ANON_KEY;
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
@@ -15,9 +17,9 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   },
 });
 
-export const supabaseAdmin = process.env.SUPABASE_SERVICE_ROLE_KEY
-  ? createClient(supabaseUrl, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } })
-  : null;
+export const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+  auth: { persistSession: false },
+});
 
 export function isWriteupRetired(row: { is_retired?: boolean; retirement_date?: string | null; isRetired?: boolean; retirementDate?: string | null }): boolean {
   return Boolean(row.is_retired || row.isRetired || ((row.retirement_date || row.retirementDate) && new Date((row.retirement_date || row.retirementDate) as string).getTime() <= Date.now()));
@@ -35,6 +37,7 @@ export function mapDbToWriteup(row: any): Writeup {
     datePublished: row.date_published,
     retirementDate: row.retirement_date,
     isRetired: Boolean(row.is_retired),
+    isProLab: Boolean(row.is_pro_lab),
     points: row.points || 0,
     ipAddress: row.ip_address || '',
     featured: Boolean(row.featured),

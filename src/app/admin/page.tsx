@@ -3,8 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Shield, Key, Lock, Unlock, Plus, RefreshCw, Check, Copy, 
-  Trash2, Edit, ExternalLink, Terminal, AlertTriangle, FileText, 
-  Award, Eye, EyeOff, CheckCircle2 
+  Trash2, ExternalLink, Terminal, AlertTriangle, FileText, 
+  Award, Eye, CheckCircle2, Server, Download, Globe, Sparkles
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -17,9 +17,33 @@ export default function AdminPage() {
   const [writeups, setWriteups] = useState<any[]>([]);
   const [certs, setCerts] = useState<any[]>([]);
   const [notionStatus, setNotionStatus] = useState<any>(null);
+  const [notionPages, setNotionPages] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [copiedSlug, setCopiedSlug] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Import Modal state
+  const [selectedNotionPage, setSelectedNotionPage] = useState<any | null>(null);
+  const [importConfig, setImportConfig] = useState({
+    title: '',
+    isProLab: false,
+    platform: 'HTB',
+    difficulty: 'Medium',
+    unlockPassword: '',
+  });
+
+  // Certificate form state
+  const [newCert, setNewCert] = useState({
+    name: '',
+    fullName: '',
+    issuer: 'OffSec',
+    date: '2024',
+    status: 'earned',
+    credentialId: '',
+    badgeColor: '#00ff66',
+    description: '',
+    skillsCovered: '',
+  });
 
   // New writeup form state
   const [newWriteup, setNewWriteup] = useState({
@@ -35,6 +59,7 @@ export default function AdminPage() {
     previewContent: '## 1. Initial Reconnaissance\n\nTarget IP: 10.10.11.x\n\n```bash:command\n$ nmap -sC -sV -p- -oN nmap/initial.txt 10.10.11.x\n```',
     fullContent: '## 2. Exploitation & Foothold\n\nExploitation steps here...\n\n## 3. Privilege Escalation\n\nRoot flag obtained:\n\n```bash:command\n# cat /root/root.txt\n```',
     isRetired: false,
+    isProLab: false,
     unlockPassword: '',
     points: 30,
     ipAddress: '',
@@ -90,11 +115,19 @@ export default function AdminPage() {
         setCerts(cData || []);
       }
 
-      // Fetch Notion status
+      // Fetch Notion status & discoverable pages
       const nRes = await fetch('/api/sync/notion/status');
       if (nRes.ok) {
         const nData = await nRes.json();
         setNotionStatus(nData);
+      }
+
+      const pRes = await fetch('/api/admin/notion/pages', {
+        headers: { 'x-admin-key': key },
+      });
+      if (pRes.ok) {
+        const pData = await pRes.json();
+        setNotionPages(pData.pages || []);
       }
     } catch (e) {
       console.error(e);
@@ -109,11 +142,13 @@ export default function AdminPage() {
     setTimeout(() => setCopiedSlug(null), 2500);
   };
 
-  const handleGeneratePassword = () => {
-    const machine = newWriteup.title.replace(/[^a-zA-Z0-9]/g, '') || 'Machine';
+  const handleGeneratePassword = (title: string, isProLab: boolean) => {
+    const machine = (title || 'Target').replace(/[^a-zA-Z0-9]/g, '');
     const randHex = Math.random().toString(16).substring(2, 8).toUpperCase();
-    const generated = `HTB{${machine}_pwn3d_${randHex}_root!}`;
-    setNewWriteup(prev => ({ ...prev, unlockPassword: generated }));
+    if (isProLab) {
+      return `HTB{${machine}_ProLab_Enterprise_${randHex}!}`;
+    }
+    return `HTB{${machine}_pwn3d_${randHex}_root!}`;
   };
 
   const handleCreateWriteup = async (e: React.FormEvent) => {
@@ -127,7 +162,10 @@ export default function AdminPage() {
           'Content-Type': 'application/json',
           'x-admin-key': adminKey,
         },
-        body: JSON.stringify(newWriteup),
+        body: JSON.stringify({
+          ...newWriteup,
+          platform: newWriteup.isProLab ? 'HTB Pro Lab' : newWriteup.platform,
+        }),
       });
 
       const data = await res.json();
@@ -145,8 +183,102 @@ export default function AdminPage() {
     }
   };
 
+  const handleImportNotionPage = async () => {
+    if (!selectedNotionPage) return;
+    setLoading(true);
+    setMessage(null);
+    try {
+      const res = await fetch('/api/admin/notion/import', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-key': adminKey,
+        },
+        body: JSON.stringify({
+          pageId: selectedNotionPage.id,
+          overrides: {
+            title: importConfig.title,
+            isProLab: importConfig.isProLab,
+            platform: importConfig.isProLab ? 'HTB Pro Lab' : importConfig.platform,
+            difficulty: importConfig.difficulty,
+            unlockPassword: importConfig.unlockPassword,
+          },
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setMessage({ 
+          type: 'success', 
+          text: `Successfully imported "${importConfig.title}" from Notion! (${data.imagesRehosted} screenshots re-hosted to Supabase Storage, PDF created).` 
+        });
+        setSelectedNotionPage(null);
+        fetchData(adminKey);
+        setActiveTab('passwords');
+      } else {
+        setMessage({ type: 'error', text: data.error || 'Import failed' });
+      }
+    } catch (e: any) {
+      setMessage({ type: 'error', text: e.message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCreateCert = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setMessage(null);
+    try {
+      const res = await fetch('/api/certificates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newCert),
+      });
+
+      if (res.ok) {
+        setMessage({ type: 'success', text: `Certificate "${newCert.name}" saved to Supabase!` });
+        setNewCert({
+          name: '',
+          fullName: '',
+          issuer: 'OffSec',
+          date: '2024',
+          status: 'earned',
+          credentialId: '',
+          badgeColor: '#00ff66',
+          description: '',
+          skillsCovered: '',
+        });
+        fetchData(adminKey);
+      } else {
+        const d = await res.json();
+        setMessage({ type: 'error', text: d.error || 'Failed to save certificate' });
+      }
+    } catch (e: any) {
+      setMessage({ type: 'error', text: e.message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteCert = async (id: string, name: string) => {
+    if (!confirm(`Delete certificate "${name}" from Supabase?`)) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/certificates/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setMessage({ type: 'success', text: `Deleted certificate "${name}"` });
+        fetchData(adminKey);
+      }
+    } catch (e: any) {
+      setMessage({ type: 'error', text: e.message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleToggleRetirement = async (id: string, currentStatus: boolean, title: string) => {
-    if (!confirm(`Are you sure you want to mark "${title}" as ${currentStatus ? 'ACTIVE (Locked)' : 'RETIRED (Public for all)'}?`)) return;
+    if (!confirm(`Mark "${title}" as ${currentStatus ? 'ACTIVE (Locked)' : 'RETIRED (Public for all)'}?`)) return;
 
     setLoading(true);
     try {
@@ -194,20 +326,20 @@ export default function AdminPage() {
   // 1. AUTH SCREEN
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-bg-dark text-text-primary flex items-center justify-center p-4">
-        <div className="w-full max-w-md bg-card-bg border border-neon-green/30 rounded-lg p-6 shadow-2xl shadow-neon-green/10">
-          <div className="flex items-center gap-3 mb-6 border-b border-border-color pb-4">
-            <div className="p-2 bg-neon-green/10 border border-neon-green/30 rounded">
-              <Shield className="w-6 h-6 text-neon-green" />
+      <div className="min-h-screen bg-[#050708] text-white flex items-center justify-center p-4">
+        <div className="w-full max-w-md bg-[#0a0f14] border border-[#00ff66]/30 rounded-xl p-8 shadow-2xl shadow-[#00ff66]/10">
+          <div className="flex items-center gap-3 mb-6 border-b border-[#1b2631] pb-4">
+            <div className="p-2.5 bg-[#00ff66]/10 border border-[#00ff66]/40 rounded-lg">
+              <Shield className="w-6 h-6 text-[#00ff66]" />
             </div>
             <div>
-              <h1 className="text-xl font-mono font-bold text-neon-green">ROOT ACCESS CONTROL</h1>
-              <p className="text-xs text-text-muted font-mono">Nulbyt3 Admin Vault & CMS</p>
+              <h1 className="text-lg font-mono font-bold text-[#00ff66]">ROOT ACCESS CONTROL</h1>
+              <p className="text-xs text-gray-400 font-mono">Nulbyt3 Vault Management Console</p>
             </div>
           </div>
 
           {message && (
-            <div className={`p-3 rounded mb-4 text-xs font-mono border ${
+            <div className={`p-3 rounded-lg mb-5 text-xs font-mono border ${
               message.type === 'error' ? 'bg-red-500/10 border-red-500/40 text-red-400' : 'bg-green-500/10 border-green-500/40 text-green-400'
             }`}>
               {message.text}
@@ -215,18 +347,18 @@ export default function AdminPage() {
           )}
 
           <form onSubmit={(e) => { e.preventDefault(); checkAuth(adminKey); }}>
-            <div className="mb-4">
-              <label className="block text-xs font-mono text-text-muted mb-2 uppercase tracking-wider">
+            <div className="mb-5">
+              <label className="block text-xs font-mono text-gray-400 mb-2 uppercase tracking-wider">
                 Administrative Passphrase
               </label>
               <div className="relative">
-                <Key className="absolute left-3 top-3 w-4 h-4 text-text-muted" />
+                <Key className="absolute left-3.5 top-3 w-4 h-4 text-gray-500" />
                 <input
                   type="password"
                   value={adminKey}
                   onChange={(e) => setAdminKey(e.target.value)}
-                  placeholder="Enter admin password (default: nulbyt3-root)"
-                  className="w-full bg-bg-dark border border-border-color rounded pl-10 pr-3 py-2 text-sm font-mono focus:border-neon-green focus:outline-none text-neon-green placeholder:text-text-muted/40"
+                  placeholder="Enter admin key (default: nulbyt3-root)"
+                  className="w-full bg-[#050708] border border-[#1b2631] rounded-lg pl-10 pr-3 py-2.5 text-sm font-mono focus:border-[#00ff66] focus:outline-none text-[#00ff66] placeholder:text-gray-600"
                   autoFocus
                 />
               </div>
@@ -235,15 +367,15 @@ export default function AdminPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-2.5 bg-neon-green text-bg-dark font-mono font-bold text-sm rounded hover:bg-neon-green/90 transition-all flex items-center justify-center gap-2"
+              className="w-full py-3 bg-[#00ff66] text-[#050708] font-mono font-bold text-sm rounded-lg hover:bg-[#00ff66]/90 transition-all flex items-center justify-center gap-2 shadow-lg shadow-[#00ff66]/20"
             >
               {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Terminal className="w-4 h-4" />}
               AUTHENTICATE ROOT
             </button>
           </form>
-          <div className="mt-4 text-center">
-            <Link href="/" className="text-xs font-mono text-text-muted hover:text-neon-green transition-colors">
-              &larr; Return to Portfolio
+          <div className="mt-6 text-center">
+            <Link href="/" className="text-xs font-mono text-gray-500 hover:text-[#00ff66] transition-colors">
+              &larr; Return to Public Portfolio
             </Link>
           </div>
         </div>
@@ -251,80 +383,100 @@ export default function AdminPage() {
     );
   }
 
-  // 2. AUTHENTICATED MANAGEMENT DASHBOARD
-  const activeWriteups = writeups.filter(w => !w.is_retired);
+  // Filter groups
+  const proLabWriteups = writeups.filter(w => w.is_pro_lab);
+  const activeBoxWriteups = writeups.filter(w => !w.is_pro_lab && !w.is_retired);
+  const retiredWriteups = writeups.filter(w => !w.is_pro_lab && w.is_retired);
 
   return (
-    <div className="min-h-screen bg-bg-dark text-text-primary p-4 md:p-8">
+    <div className="min-h-screen bg-[#050708] text-white pt-8 pb-16 px-4 md:px-8">
       <div className="max-w-7xl mx-auto">
-        {/* Header Strip */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border-color pb-6 mb-8">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="inline-block w-2.5 h-2.5 rounded-full bg-neon-green animate-pulse"></span>
-              <h1 className="text-2xl font-mono font-bold text-neon-green">NULBYT3 VAULT CONSOLE</h1>
+        {/* Dedicated Admin Header Bar (Completely separate from public Navbar) */}
+        <div className="bg-[#0a0f14] border border-[#1b2631] rounded-2xl p-6 mb-8 shadow-xl">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-xl bg-[#00ff66]/10 border border-[#00ff66]/30 flex items-center justify-center">
+                <Terminal className="w-6 h-6 text-[#00ff66]" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2.5">
+                  <h1 className="text-xl font-mono font-bold text-white tracking-wider">
+                    NULBYT3 VAULT CONSOLE
+                  </h1>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-[#00ff66]/15 text-[#00ff66] border border-[#00ff66]/30">
+                    ROOT
+                  </span>
+                </div>
+                <p className="text-xs text-gray-400 font-mono mt-1 flex flex-wrap items-center gap-3">
+                  <span>DB: <strong className="text-gray-300">Supabase EU-WEST</strong></span>
+                  <span className="text-gray-600">•</span>
+                  <span>Host: <strong className="text-gray-300">Vercel Edge</strong></span>
+                  <span className="text-gray-600">•</span>
+                  <span>Notion: <strong className="text-purple-400">{notionStatus?.workspace || 'HTB MACHINES'}</strong></span>
+                </p>
+              </div>
             </div>
-            <p className="text-xs text-text-muted font-mono mt-1">
-              Live Database: <span className="text-text-primary">Supabase EU-WEST</span> • Host: <span className="text-text-primary">Vercel Edge</span>
-            </p>
-          </div>
 
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => fetchData(adminKey)}
-              disabled={loading}
-              className="px-3 py-1.5 bg-card-bg border border-border-color hover:border-neon-green/50 text-xs font-mono rounded flex items-center gap-2 transition-all"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-neon-green' : ''}`} />
-              Refresh Data
-            </button>
-            <Link
-              href="/writeups"
-              target="_blank"
-              className="px-3 py-1.5 bg-neon-green/10 border border-neon-green/30 text-neon-green text-xs font-mono rounded flex items-center gap-2 hover:bg-neon-green/20 transition-all"
-            >
-              <ExternalLink className="w-3.5 h-3.5" />
-              Live Site
-            </Link>
-            <button
-              onClick={() => { sessionStorage.removeItem('admin_key'); setIsAuthenticated(false); }}
-              className="px-3 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-mono rounded hover:bg-red-500/20 transition-all"
-            >
-              Lock Console
-            </button>
+            {/* Action buttons (Cleanly spaced, no overlap) */}
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                onClick={() => fetchData(adminKey)}
+                disabled={loading}
+                className="px-3.5 py-2 bg-[#0e141a] border border-[#1b2631] hover:border-[#00ff66]/50 text-xs font-mono rounded-lg flex items-center gap-2 text-gray-300 hover:text-white transition-all"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-[#00ff66]' : ''}`} />
+                Refresh
+              </button>
+              <Link
+                href="/writeups"
+                target="_blank"
+                className="px-3.5 py-2 bg-[#00ff66]/10 border border-[#00ff66]/30 text-[#00ff66] hover:bg-[#00ff66]/20 text-xs font-mono rounded-lg flex items-center gap-2 transition-all font-semibold"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                Live Site
+              </Link>
+              <button
+                onClick={() => { sessionStorage.removeItem('admin_key'); setIsAuthenticated(false); }}
+                className="px-3.5 py-2 bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 text-xs font-mono rounded-lg transition-all"
+              >
+                Lock Console
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Alerts & Messages */}
+        {/* Global Notifications */}
         {message && (
-          <div className={`p-4 rounded-lg mb-6 text-sm font-mono border flex items-center justify-between ${
-            message.type === 'error' ? 'bg-red-500/10 border-red-500/40 text-red-400' : 'bg-neon-green/10 border-neon-green/40 text-neon-green'
+          <div className={`p-4 rounded-xl mb-8 text-sm font-mono border flex items-center justify-between shadow-lg ${
+            message.type === 'error' ? 'bg-red-500/10 border-red-500/40 text-red-400' : 'bg-[#00ff66]/10 border-[#00ff66]/40 text-[#00ff66]'
           }`}>
             <span>{message.text}</span>
-            <button onClick={() => setMessage(null)} className="text-xs hover:underline ml-4 font-bold">DISMISS</button>
+            <button onClick={() => setMessage(null)} className="text-xs hover:underline ml-4 font-bold">
+              DISMISS
+            </button>
           </div>
         )}
 
-        {/* Tab Navigation */}
-        <div className="flex border-b border-border-color mb-8 gap-2 overflow-x-auto pb-1">
+        {/* Navigation Tabs */}
+        <div className="flex border-b border-[#1b2631] mb-8 gap-2 overflow-x-auto pb-1">
           <button
             onClick={() => setActiveTab('passwords')}
-            className={`px-4 py-2.5 text-xs font-mono font-bold rounded-t flex items-center gap-2 border-b-2 transition-all ${
+            className={`px-4 py-2.5 text-xs font-mono font-bold rounded-t-lg flex items-center gap-2 border-b-2 transition-all whitespace-nowrap ${
               activeTab === 'passwords'
-                ? 'border-neon-green text-neon-green bg-neon-green/5'
-                : 'border-transparent text-text-muted hover:text-text-primary'
+                ? 'border-[#00ff66] text-[#00ff66] bg-[#00ff66]/5'
+                : 'border-transparent text-gray-400 hover:text-white'
             }`}
           >
-            <Key className="w-4 h-4 text-neon-green" />
-            PASSWORD VAULT ({activeWriteups.length})
+            <Key className="w-4 h-4 text-[#00ff66]" />
+            PASSWORD VAULT ({proLabWriteups.length + activeBoxWriteups.length})
           </button>
 
           <button
             onClick={() => setActiveTab('writeups')}
-            className={`px-4 py-2.5 text-xs font-mono font-bold rounded-t flex items-center gap-2 border-b-2 transition-all ${
+            className={`px-4 py-2.5 text-xs font-mono font-bold rounded-t-lg flex items-center gap-2 border-b-2 transition-all whitespace-nowrap ${
               activeTab === 'writeups'
-                ? 'border-neon-green text-neon-green bg-neon-green/5'
-                : 'border-transparent text-text-muted hover:text-text-primary'
+                ? 'border-[#00ff66] text-[#00ff66] bg-[#00ff66]/5'
+                : 'border-transparent text-gray-400 hover:text-white'
             }`}
           >
             <FileText className="w-4 h-4" />
@@ -333,142 +485,248 @@ export default function AdminPage() {
 
           <button
             onClick={() => setActiveTab('new-writeup')}
-            className={`px-4 py-2.5 text-xs font-mono font-bold rounded-t flex items-center gap-2 border-b-2 transition-all ${
+            className={`px-4 py-2.5 text-xs font-mono font-bold rounded-t-lg flex items-center gap-2 border-b-2 transition-all whitespace-nowrap ${
               activeTab === 'new-writeup'
-                ? 'border-neon-green text-neon-green bg-neon-green/5'
-                : 'border-transparent text-text-muted hover:text-text-primary'
+                ? 'border-[#00ff66] text-[#00ff66] bg-[#00ff66]/5'
+                : 'border-transparent text-gray-400 hover:text-white'
             }`}
           >
             <Plus className="w-4 h-4" />
-            + NEW WRITEUP
+            + POST WRITEUP
+          </button>
+
+          <button
+            onClick={() => setActiveTab('certs')}
+            className={`px-4 py-2.5 text-xs font-mono font-bold rounded-t-lg flex items-center gap-2 border-b-2 transition-all whitespace-nowrap ${
+              activeTab === 'certs'
+                ? 'border-neon-green text-[#00ff66] bg-[#00ff66]/5'
+                : 'border-transparent text-gray-400 hover:text-white'
+            }`}
+          >
+            <Award className="w-4 h-4 text-orange-400" />
+            CERTIFICATIONS ({certs.length})
           </button>
 
           <button
             onClick={() => setActiveTab('notion')}
-            className={`px-4 py-2.5 text-xs font-mono font-bold rounded-t flex items-center gap-2 border-b-2 transition-all ${
+            className={`px-4 py-2.5 text-xs font-mono font-bold rounded-t-lg flex items-center gap-2 border-b-2 transition-all whitespace-nowrap ${
               activeTab === 'notion'
-                ? 'border-neon-green text-neon-green bg-neon-green/5'
-                : 'border-transparent text-text-muted hover:text-text-primary'
+                ? 'border-[#00ff66] text-[#00ff66] bg-[#00ff66]/5'
+                : 'border-transparent text-gray-400 hover:text-white'
             }`}
           >
-            <RefreshCw className="w-4 h-4" />
-            NOTION SYNC HUB
+            <RefreshCw className="w-4 h-4 text-purple-400" />
+            NOTION IMPORT HUB ({notionPages.length})
           </button>
         </div>
 
-        {/* TAB 1: PASSWORD VAULT (Resolves Item 6) */}
+        {/* ========================================================================= */}
+        {/* TAB 1: PASSWORD VAULT (Pro Labs + Active Machines)                       */}
+        {/* ========================================================================= */}
         {activeTab === 'passwords' && (
-          <div>
-            <div className="bg-card-bg border border-border-color rounded-lg p-6 mb-6">
-              <div className="flex items-center gap-3 mb-2">
-                <Lock className="w-5 h-5 text-neon-green" />
-                <h2 className="text-lg font-mono font-bold text-text-primary">ACTIVE MACHINE PASSPHRASE VAULT</h2>
+          <div className="space-y-10">
+            {/* Section A: HTB Pro Labs */}
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-1.5 rounded bg-purple-500/10 border border-purple-500/30">
+                    <Server className="w-4 h-4 text-purple-400" />
+                  </div>
+                  <div>
+                    <h2 className="text-base font-mono font-bold text-white">HTB PRO LABS (LOCKED BY DEFAULT)</h2>
+                    <p className="text-xs font-mono text-gray-400">
+                      All Pro Lab writeups are locked by default with dedicated passphrases. They never auto-unlock.
+                    </p>
+                  </div>
+                </div>
+                <span className="text-xs font-mono text-purple-400 font-bold px-2.5 py-1 rounded bg-purple-500/10 border border-purple-500/30">
+                  {proLabWriteups.length} LABS
+                </span>
               </div>
-              <p className="text-xs text-text-muted font-mono">
-                These are passwords for machines that have NOT yet retired. You do not need to memorize them. Click &quot;Copy&quot; whenever you want to test unlocking or view them.
-              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {proLabWriteups.map((w) => (
+                  <div key={w.slug} className="bg-[#0a0f14] border border-purple-500/30 rounded-xl p-5 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between mb-2.5">
+                        <span className="px-2 py-0.5 text-[10px] font-mono font-bold rounded bg-purple-500/15 text-purple-400 border border-purple-500/40 uppercase">
+                          ENTERPRISE PRO LAB
+                        </span>
+                        <span className="text-xs font-mono text-gray-400">{w.difficulty} • {w.points || 100} pts</span>
+                      </div>
+
+                      <h3 className="text-base font-mono font-bold text-white mb-1">{w.title}</h3>
+                      <p className="text-xs text-gray-400 font-mono mb-4">{w.summary}</p>
+
+                      <div className="bg-[#050708] border border-[#1b2631] rounded-lg p-3 mb-4">
+                        <div className="text-[10px] font-mono text-gray-400 uppercase tracking-wider mb-1">
+                          Pro Lab Unlock Passphrase:
+                        </div>
+                        <div className="font-mono text-xs text-purple-400 break-all select-all font-semibold">
+                          {w.unlock_password || '(Password set in database)'}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 pt-3 border-t border-[#1b2631]">
+                      <button
+                        onClick={() => handleCopyPassword(w.slug, w.unlock_password || '')}
+                        disabled={!w.unlock_password}
+                        className="flex-1 py-2 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/40 text-purple-300 font-mono text-xs rounded-lg flex items-center justify-center gap-1.5 transition-all font-semibold"
+                      >
+                        {copiedSlug === w.slug ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                        {copiedSlug === w.slug ? 'COPIED TO CLIPBOARD!' : 'COPY PASSPHRASE'}
+                      </button>
+
+                      <Link
+                        href={`/writeups/${w.slug}`}
+                        target="_blank"
+                        className="px-3 py-2 bg-[#0e141a] hover:bg-[#1b2631] border border-[#1b2631] text-gray-300 hover:text-white font-mono text-xs rounded-lg transition-all"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                      </Link>
+                    </div>
+                  </div>
+                ))}
+
+                {proLabWriteups.length === 0 && (
+                  <div className="col-span-2 text-center py-10 bg-[#0a0f14] border border-[#1b2631] rounded-xl">
+                    <Server className="w-8 h-8 text-purple-400 mx-auto mb-2 opacity-50" />
+                    <p className="text-sm font-mono text-gray-400">No HTB Pro Labs added yet.</p>
+                    <button
+                      onClick={() => setActiveTab('new-writeup')}
+                      className="mt-3 px-4 py-1.5 bg-purple-500/15 border border-purple-500/30 text-purple-400 font-mono text-xs rounded hover:bg-purple-500/25 transition-all"
+                    >
+                      + Add Pro Lab Writeup
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {activeWriteups.map((w) => (
-                <div key={w.slug} className="bg-card-bg border border-neon-green/30 rounded-lg p-5 flex flex-col justify-between">
+            {/* Section B: Active CTF Machines */}
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-1.5 rounded bg-red-500/10 border border-red-500/30">
+                    <Lock className="w-4 h-4 text-red-400" />
+                  </div>
                   <div>
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="px-2 py-0.5 text-[10px] font-mono font-bold uppercase rounded bg-red-500/10 text-red-400 border border-red-500/30">
-                        ACTIVE / LOCKED
-                      </span>
-                      <span className="text-xs font-mono text-text-muted">{w.platform} • {w.difficulty}</span>
-                    </div>
-
-                    <h3 className="text-base font-mono font-bold text-text-primary mb-1">{w.title}</h3>
-                    <p className="text-xs text-text-muted font-mono mb-4">{w.summary || 'No summary available.'}</p>
-
-                    <div className="bg-bg-dark border border-border-color rounded p-3 mb-4">
-                      <div className="text-[10px] font-mono text-text-muted uppercase tracking-wider mb-1">
-                        Unlock Passphrase (Saved in DB):
-                      </div>
-                      <div className="font-mono text-xs text-neon-green break-all select-all">
-                        {w.unlock_password || '(No cleartext password recorded)'}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 pt-3 border-t border-border-color">
-                    <button
-                      onClick={() => handleCopyPassword(w.slug, w.unlock_password || '')}
-                      disabled={!w.unlock_password}
-                      className="flex-1 py-2 bg-neon-green/10 hover:bg-neon-green/20 border border-neon-green/40 text-neon-green font-mono text-xs rounded flex items-center justify-center gap-1.5 transition-all"
-                    >
-                      {copiedSlug === w.slug ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                      {copiedSlug === w.slug ? 'COPIED!' : 'COPY PASSPHRASE'}
-                    </button>
-
-                    <button
-                      onClick={() => handleToggleRetirement(w.id, w.is_retired, w.title)}
-                      className="px-3 py-2 bg-card-bg hover:bg-border-color border border-border-color text-text-muted hover:text-text-primary font-mono text-xs rounded transition-all"
-                      title="Mark as Retired (Unlocks for everyone)"
-                    >
-                      Retire Now
-                    </button>
-
-                    <Link
-                      href={`/writeups/${w.slug}`}
-                      target="_blank"
-                      className="px-3 py-2 bg-card-bg hover:bg-border-color border border-border-color text-text-muted hover:text-text-primary font-mono text-xs rounded transition-all"
-                    >
-                      <Eye className="w-3.5 h-3.5" />
-                    </Link>
+                    <h2 className="text-base font-mono font-bold text-white">ACTIVE CTF MACHINES (EARLY ACCESS PASSPHRASE)</h2>
+                    <p className="text-xs font-mono text-gray-400">
+                      Active machines auto-unlock once retired, or early via these passphrases.
+                    </p>
                   </div>
                 </div>
-              ))}
+                <span className="text-xs font-mono text-red-400 font-bold px-2.5 py-1 rounded bg-red-500/10 border border-red-500/30">
+                  {activeBoxWriteups.length} ACTIVE
+                </span>
+              </div>
 
-              {activeWriteups.length === 0 && (
-                <div className="col-span-2 text-center py-12 bg-card-bg border border-border-color rounded-lg">
-                  <Unlock className="w-8 h-8 text-neon-green mx-auto mb-2 opacity-50" />
-                  <p className="text-sm font-mono text-text-muted">No active machines locked at this time. All writeups are retired and public!</p>
-                </div>
-              )}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {activeBoxWriteups.map((w) => (
+                  <div key={w.slug} className="bg-[#0a0f14] border border-red-500/30 rounded-xl p-5 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between mb-2.5">
+                        <span className="px-2 py-0.5 text-[10px] font-mono font-bold rounded bg-red-500/15 text-red-400 border border-red-500/40 uppercase">
+                          ACTIVE / SEASONAL BOX
+                        </span>
+                        <span className="text-xs font-mono text-gray-400">{w.platform} • {w.difficulty}</span>
+                      </div>
+
+                      <h3 className="text-base font-mono font-bold text-white mb-1">{w.title}</h3>
+                      <p className="text-xs text-gray-400 font-mono mb-4">{w.summary}</p>
+
+                      <div className="bg-[#050708] border border-[#1b2631] rounded-lg p-3 mb-4">
+                        <div className="text-[10px] font-mono text-gray-400 uppercase tracking-wider mb-1">
+                          Early Access Flag Passphrase:
+                        </div>
+                        <div className="font-mono text-xs text-[#00ff66] break-all select-all font-semibold">
+                          {w.unlock_password || '(Encrypted in DB)'}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 pt-3 border-t border-[#1b2631]">
+                      <button
+                        onClick={() => handleCopyPassword(w.slug, w.unlock_password || '')}
+                        disabled={!w.unlock_password}
+                        className="flex-1 py-2 bg-[#00ff66]/10 hover:bg-[#00ff66]/20 border border-[#00ff66]/40 text-[#00ff66] font-mono text-xs rounded-lg flex items-center justify-center gap-1.5 transition-all font-semibold"
+                      >
+                        {copiedSlug === w.slug ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                        {copiedSlug === w.slug ? 'COPIED TO CLIPBOARD!' : 'COPY PASSPHRASE'}
+                      </button>
+
+                      <button
+                        onClick={() => handleToggleRetirement(w.id, w.is_retired, w.title)}
+                        className="px-3 py-2 bg-[#0e141a] hover:bg-[#1b2631] border border-[#1b2631] text-gray-300 hover:text-white font-mono text-xs rounded-lg transition-all"
+                        title="Mark as Retired (Public for all)"
+                      >
+                        Retire
+                      </button>
+
+                      <Link
+                        href={`/writeups/${w.slug}`}
+                        target="_blank"
+                        className="px-3 py-2 bg-[#0e141a] hover:bg-[#1b2631] border border-[#1b2631] text-gray-300 hover:text-white font-mono text-xs rounded-lg transition-all"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                      </Link>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}
 
-        {/* TAB 2: ALL WRITEUPS (Edit / Delete / View) */}
+        {/* ========================================================================= */}
+        {/* TAB 2: ALL WRITEUPS (Edit, Retire, Delete)                                */}
+        {/* ========================================================================= */}
         {activeTab === 'writeups' && (
           <div className="space-y-4">
             {writeups.map((w) => (
-              <div key={w.slug} className="bg-card-bg border border-border-color hover:border-neon-green/30 rounded-lg p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all">
-                <div className="space-y-1">
+              <div key={w.slug} className="bg-[#0a0f14] border border-[#1b2631] hover:border-[#00ff66]/30 rounded-xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all">
+                <div className="space-y-1.5">
                   <div className="flex items-center gap-2">
-                    <span className={`px-2 py-0.5 text-[10px] font-mono font-bold rounded ${
-                      w.is_retired 
-                        ? 'bg-neon-green/10 text-neon-green border border-neon-green/30'
-                        : 'bg-red-500/10 text-red-400 border border-red-500/30'
-                    }`}>
-                      {w.is_retired ? 'RETIRED (PUBLIC)' : 'ACTIVE (LOCKED)'}
-                    </span>
-                    <span className="text-xs font-mono text-text-muted">{w.platform} • {w.difficulty} • {w.os}</span>
+                    {w.is_pro_lab ? (
+                      <span className="px-2 py-0.5 text-[10px] font-mono font-bold rounded bg-purple-500/15 text-purple-400 border border-purple-500/30">
+                        HTB PRO LAB
+                      </span>
+                    ) : w.is_retired ? (
+                      <span className="px-2 py-0.5 text-[10px] font-mono font-bold rounded bg-[#00ff66]/10 text-[#00ff66] border border-[#00ff66]/30">
+                        RETIRED (PUBLIC)
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 text-[10px] font-mono font-bold rounded bg-red-500/10 text-red-400 border border-red-500/30">
+                        ACTIVE (LOCKED)
+                      </span>
+                    )}
+                    <span className="text-xs font-mono text-gray-400">{w.platform} • {w.difficulty} • {w.os}</span>
                   </div>
-                  <h3 className="text-base font-mono font-bold text-text-primary">{w.title}</h3>
-                  <p className="text-xs text-text-muted font-mono line-clamp-1">{w.summary}</p>
+                  <h3 className="text-base font-mono font-bold text-white">{w.title}</h3>
+                  <p className="text-xs text-gray-400 font-mono line-clamp-1">{w.summary}</p>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => handleToggleRetirement(w.id, w.is_retired, w.title)}
-                    className="px-3 py-1.5 bg-card-bg hover:bg-border-color border border-border-color text-xs font-mono rounded text-text-muted hover:text-text-primary"
-                  >
-                    {w.is_retired ? 'Make Active' : 'Retire'}
-                  </button>
+                <div className="flex items-center gap-2 shrink-0">
+                  {!w.is_pro_lab && (
+                    <button
+                      onClick={() => handleToggleRetirement(w.id, w.is_retired, w.title)}
+                      className="px-3 py-1.5 bg-[#0e141a] hover:bg-[#1b2631] border border-[#1b2631] text-xs font-mono rounded-lg text-gray-300 hover:text-white"
+                    >
+                      {w.is_retired ? 'Make Active' : 'Retire'}
+                    </button>
+                  )}
                   <Link
                     href={`/writeups/${w.slug}`}
                     target="_blank"
-                    className="px-3 py-1.5 bg-card-bg hover:bg-border-color border border-border-color text-xs font-mono rounded text-text-muted hover:text-text-primary flex items-center gap-1"
+                    className="px-3 py-1.5 bg-[#0e141a] hover:bg-[#1b2631] border border-[#1b2631] text-xs font-mono rounded-lg text-gray-300 hover:text-white flex items-center gap-1"
                   >
                     <Eye className="w-3.5 h-3.5" /> View
                   </Link>
                   <button
                     onClick={() => handleDeleteWriteup(w.id, w.title)}
-                    className="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 text-xs font-mono rounded"
+                    className="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 text-xs font-mono rounded-lg"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
@@ -478,64 +736,93 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* TAB 3: NEW WRITEUP CREATOR (Resolves Item 1 & Item 5) */}
+        {/* ========================================================================= */}
+        {/* TAB 3: NEW WRITEUP CREATOR                                                */}
+        {/* ========================================================================= */}
         {activeTab === 'new-writeup' && (
-          <div className="bg-card-bg border border-border-color rounded-lg p-6 max-w-4xl">
-            <h2 className="text-lg font-mono font-bold text-neon-green mb-1 flex items-center gap-2">
+          <div className="bg-[#0a0f14] border border-[#1b2631] rounded-xl p-8 max-w-4xl">
+            <h2 className="text-lg font-mono font-bold text-[#00ff66] mb-1 flex items-center gap-2">
               <Plus className="w-5 h-5" /> POST NEW WRITEUP TO SUPABASE
             </h2>
-            <p className="text-xs text-text-muted font-mono mb-6">
-              Create and publish a new writeup directly. It will instantly appear on your site and database.
+            <p className="text-xs text-gray-400 font-mono mb-6">
+              Create and publish a machine or Pro Lab writeup. It will instantly appear on your site and database.
             </p>
 
-            <form onSubmit={handleCreateWriteup} className="space-y-4">
+            <form onSubmit={handleCreateWriteup} className="space-y-5">
+              {/* Pro Lab Toggle */}
+              <div className="p-4 rounded-xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <div className="font-mono text-sm font-bold text-purple-300 flex items-center gap-2">
+                    <Server className="w-4 h-4 text-purple-400" />
+                    THIS IS AN HTB PRO LAB WRITEUP
+                  </div>
+                  <p className="text-xs font-mono text-gray-400">
+                    Pro Lab writeups are locked by default with dedicated passphrases.
+                  </p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={newWriteup.isProLab}
+                  onChange={(e) => {
+                    const isLab = e.target.checked;
+                    setNewWriteup(prev => ({
+                      ...prev,
+                      isProLab: isLab,
+                      platform: isLab ? 'HTB Pro Lab' : 'HTB',
+                      unlockPassword: isLab && !prev.unlockPassword ? handleGeneratePassword(prev.title, true) : prev.unlockPassword,
+                    }));
+                  }}
+                  className="w-5 h-5 accent-purple-500 rounded cursor-pointer"
+                />
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-mono text-text-muted uppercase mb-1">Title / Machine Name *</label>
+                  <label className="block text-xs font-mono text-gray-400 uppercase mb-1">Title / Machine Name *</label>
                   <input
                     type="text"
                     required
                     value={newWriteup.title}
                     onChange={(e) => setNewWriteup({ ...newWriteup, title: e.target.value })}
-                    placeholder="e.g. Forest, Cicada, Resolute"
-                    className="w-full bg-bg-dark border border-border-color rounded px-3 py-2 text-sm font-mono text-text-primary focus:border-neon-green focus:outline-none"
+                    placeholder="e.g. Dante, Cicada, Zephyr, Blackfield"
+                    className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3.5 py-2.5 text-sm font-mono text-white focus:border-[#00ff66] focus:outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-mono text-text-muted uppercase mb-1">Slug (URL identifier)</label>
+                  <label className="block text-xs font-mono text-gray-400 uppercase mb-1">Slug (URL identifier)</label>
                   <input
                     type="text"
                     value={newWriteup.slug}
                     onChange={(e) => setNewWriteup({ ...newWriteup, slug: e.target.value })}
-                    placeholder="Leave empty to auto-generate (e.g. htb-forest)"
-                    className="w-full bg-bg-dark border border-border-color rounded px-3 py-2 text-sm font-mono text-text-primary focus:border-neon-green focus:outline-none"
+                    placeholder="Leave empty to auto-generate"
+                    className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3.5 py-2.5 text-sm font-mono text-white focus:border-[#00ff66] focus:outline-none"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-xs font-mono text-text-muted uppercase mb-1">Platform</label>
+                  <label className="block text-xs font-mono text-gray-400 uppercase mb-1">Platform</label>
                   <select
                     value={newWriteup.platform}
                     onChange={(e) => setNewWriteup({ ...newWriteup, platform: e.target.value })}
-                    className="w-full bg-bg-dark border border-border-color rounded px-3 py-2 text-sm font-mono text-text-primary focus:border-neon-green focus:outline-none"
+                    className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3.5 py-2.5 text-sm font-mono text-white focus:border-[#00ff66] focus:outline-none"
                   >
                     <option value="HTB">Hack The Box</option>
+                    <option value="HTB Pro Lab">HTB Pro Lab</option>
                     <option value="THM">TryHackMe</option>
                     <option value="Proving Grounds">Proving Grounds</option>
-                    <option value="PortSwigger">PortSwigger</option>
                     <option value="Other">Other CTF</option>
                   </select>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-mono text-text-muted uppercase mb-1">Difficulty</label>
+                  <label className="block text-xs font-mono text-gray-400 uppercase mb-1">Difficulty</label>
                   <select
                     value={newWriteup.difficulty}
                     onChange={(e) => setNewWriteup({ ...newWriteup, difficulty: e.target.value })}
-                    className="w-full bg-bg-dark border border-border-color rounded px-3 py-2 text-sm font-mono text-text-primary focus:border-neon-green focus:outline-none"
+                    className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3.5 py-2.5 text-sm font-mono text-white focus:border-[#00ff66] focus:outline-none"
                   >
                     <option value="Easy">Easy</option>
                     <option value="Medium">Medium</option>
@@ -545,107 +832,91 @@ export default function AdminPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-mono text-text-muted uppercase mb-1">OS Architecture</label>
+                  <label className="block text-xs font-mono text-gray-400 uppercase mb-1">OS / Architecture</label>
                   <select
                     value={newWriteup.os}
                     onChange={(e) => setNewWriteup({ ...newWriteup, os: e.target.value })}
-                    className="w-full bg-bg-dark border border-border-color rounded px-3 py-2 text-sm font-mono text-text-primary focus:border-neon-green focus:outline-none"
+                    className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3.5 py-2.5 text-sm font-mono text-white focus:border-[#00ff66] focus:outline-none"
                   >
+                    <option value="Active Directory">Active Directory</option>
                     <option value="Linux">Linux</option>
                     <option value="Windows">Windows</option>
-                    <option value="Active Directory">Active Directory</option>
-                    <option value="Android">Android</option>
+                    <option value="Multi">Multi-Tier Network</option>
                   </select>
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-mono text-text-muted uppercase mb-1">Tags (Comma-separated)</label>
+                <label className="block text-xs font-mono text-gray-400 uppercase mb-1">Tags (Comma-separated)</label>
                 <input
                   type="text"
                   value={newWriteup.tags}
                   onChange={(e) => setNewWriteup({ ...newWriteup, tags: e.target.value })}
-                  placeholder="Active Directory, Kerberoasting, BloodHound, LAPS"
-                  className="w-full bg-bg-dark border border-border-color rounded px-3 py-2 text-sm font-mono text-text-primary focus:border-neon-green focus:outline-none"
+                  placeholder="Active Directory, Pivoting, Kerberoasting, BloodHound"
+                  className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3.5 py-2.5 text-sm font-mono text-white focus:border-[#00ff66] focus:outline-none"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-mono text-text-muted uppercase mb-1">Summary / Executive Overview</label>
+                <label className="block text-xs font-mono text-gray-400 uppercase mb-1">Summary / Executive Overview</label>
                 <textarea
                   rows={2}
                   value={newWriteup.summary}
                   onChange={(e) => setNewWriteup({ ...newWriteup, summary: e.target.value })}
-                  placeholder="One or two sentences summarizing the vulnerability and privilege escalation vector."
-                  className="w-full bg-bg-dark border border-border-color rounded px-3 py-2 text-sm font-mono text-text-primary focus:border-neon-green focus:outline-none"
+                  placeholder="Executive summary of the attack path."
+                  className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3.5 py-2.5 text-sm font-mono text-white focus:border-[#00ff66] focus:outline-none"
                 />
               </div>
 
-              {/* Status & Passphrase Section */}
-              <div className="p-4 bg-bg-dark border border-border-color rounded-lg space-y-4">
-                <div className="flex items-center gap-4">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={newWriteup.isRetired}
-                      onChange={(e) => setNewWriteup({ ...newWriteup, isRetired: e.target.checked })}
-                      className="accent-neon-green w-4 h-4"
-                    />
-                    <span className="text-xs font-mono text-text-primary">Machine is RETIRED (Publicly viewable to all)</span>
+              {/* Passphrase & Status */}
+              <div className="p-4 bg-[#050708] border border-[#1b2631] rounded-xl space-y-4">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-mono text-[#00ff66] uppercase flex items-center gap-1.5 font-bold">
+                    <Key className="w-3.5 h-3.5" /> Unlock Passphrase
                   </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const generated = handleGeneratePassword(newWriteup.title, newWriteup.isProLab);
+                      setNewWriteup(prev => ({ ...prev, unlockPassword: generated }));
+                    }}
+                    className="text-xs font-mono text-[#00ff66] hover:underline flex items-center gap-1"
+                  >
+                    <Sparkles className="w-3 h-3" /> Auto-Generate Flag Format
+                  </button>
                 </div>
-
-                {!newWriteup.isRetired && (
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-xs font-mono text-neon-green uppercase flex items-center gap-1.5">
-                        <Key className="w-3.5 h-3.5" /> Early Unlock Passphrase (Required for Active Box)
-                      </label>
-                      <button
-                        type="button"
-                        onClick={handleGeneratePassword}
-                        className="text-[11px] font-mono text-neon-green hover:underline flex items-center gap-1"
-                      >
-                        Auto-Generate Flag Format
-                      </button>
-                    </div>
-                    <input
-                      type="text"
-                      value={newWriteup.unlockPassword}
-                      onChange={(e) => setNewWriteup({ ...newWriteup, unlockPassword: e.target.value })}
-                      placeholder="e.g. HTB{MachineName_4D_pwn3d_2024!}"
-                      className="w-full bg-card-bg border border-neon-green/40 rounded px-3 py-2 text-sm font-mono text-neon-green focus:border-neon-green focus:outline-none"
-                    />
-                    <p className="text-[11px] font-mono text-text-muted mt-1">
-                      * This password is encrypted in Supabase and displayed in your Admin Password Vault so you never forget it.
-                    </p>
-                  </div>
-                )}
+                <input
+                  type="text"
+                  value={newWriteup.unlockPassword}
+                  onChange={(e) => setNewWriteup({ ...newWriteup, unlockPassword: e.target.value })}
+                  placeholder="e.g. HTB{Dante_ProLab_Enterprise_Pwned!}"
+                  className="w-full bg-[#0a0f14] border border-[#00ff66]/40 rounded-lg px-3.5 py-2.5 text-sm font-mono text-[#00ff66] focus:border-[#00ff66] focus:outline-none"
+                />
               </div>
 
-              {/* Content Areas */}
+              {/* Markdown Content */}
               <div className="space-y-4">
                 <div>
-                  <label className="block text-xs font-mono text-text-muted uppercase mb-1">
-                    Preview Content (Shown to everyone, even when locked)
+                  <label className="block text-xs font-mono text-gray-400 uppercase mb-1">
+                    Preview Content (Shown to everyone)
                   </label>
                   <textarea
                     rows={4}
                     value={newWriteup.previewContent}
                     onChange={(e) => setNewWriteup({ ...newWriteup, previewContent: e.target.value })}
-                    className="w-full bg-bg-dark border border-border-color rounded p-3 text-xs font-mono text-text-primary focus:border-neon-green focus:outline-none"
+                    className="w-full bg-[#050708] border border-[#1b2631] rounded-lg p-3.5 text-xs font-mono text-white focus:border-[#00ff66] focus:outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-mono text-text-muted uppercase mb-1">
-                    Full Content (Exploitation Chain — Locked until unlocked or retired)
+                  <label className="block text-xs font-mono text-gray-400 uppercase mb-1">
+                    Full Content (Exploitation Chain — Server-Gated)
                   </label>
                   <textarea
                     rows={8}
                     value={newWriteup.fullContent}
                     onChange={(e) => setNewWriteup({ ...newWriteup, fullContent: e.target.value })}
-                    className="w-full bg-bg-dark border border-border-color rounded p-3 text-xs font-mono text-text-primary focus:border-neon-green focus:outline-none"
+                    className="w-full bg-[#050708] border border-[#1b2631] rounded-lg p-3.5 text-xs font-mono text-white focus:border-[#00ff66] focus:outline-none"
                   />
                 </div>
               </div>
@@ -653,7 +924,7 @@ export default function AdminPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-3 bg-neon-green text-bg-dark font-mono font-bold text-sm rounded hover:bg-neon-green/90 transition-all flex items-center justify-center gap-2"
+                className="w-full py-3.5 bg-[#00ff66] text-[#050708] font-mono font-bold text-sm rounded-lg hover:bg-[#00ff66]/90 transition-all flex items-center justify-center gap-2 shadow-lg shadow-[#00ff66]/20"
               >
                 {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
                 PUBLISH WRITEUP TO LIVE DATABASE
@@ -662,96 +933,402 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* TAB 4: NOTION SYNC HUB (Resolves Item 7) */}
-        {activeTab === 'notion' && (
-          <div className="space-y-6 max-w-4xl">
-            <div className="bg-card-bg border border-border-color rounded-lg p-6">
-              <h2 className="text-lg font-mono font-bold text-neon-green mb-2 flex items-center gap-2">
-                <RefreshCw className="w-5 h-5" /> NOTION INTEGRATION STATUS
+        {/* ========================================================================= */}
+        {/* TAB 4: CERTIFICATIONS (Admin Only)                                        */}
+        {/* ========================================================================= */}
+        {activeTab === 'certs' && (
+          <div className="space-y-8 max-w-5xl">
+            {/* Add Certificate Form */}
+            <div className="bg-[#0a0f14] border border-[#1b2631] rounded-xl p-6">
+              <h2 className="text-base font-mono font-bold text-orange-400 mb-4 flex items-center gap-2">
+                <Award className="w-5 h-5" /> ADD NEW CERTIFICATION
               </h2>
-              <p className="text-xs text-text-muted font-mono mb-6">
-                Connect your Notion workspace so your machine notes sync automatically into your portfolio.
-              </p>
 
-              {notionStatus ? (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="bg-bg-dark border border-border-color rounded p-4">
-                      <div className="text-[10px] font-mono text-text-muted uppercase">Workspace</div>
-                      <div className="text-sm font-mono font-bold text-text-primary mt-1">{notionStatus.workspace}</div>
-                    </div>
-                    <div className="bg-bg-dark border border-border-color rounded p-4">
-                      <div className="text-[10px] font-mono text-text-muted uppercase">Integration Bot</div>
-                      <div className="text-sm font-mono font-bold text-neon-green mt-1">{notionStatus.bot}</div>
-                    </div>
-                    <div className="bg-bg-dark border border-border-color rounded p-4">
-                      <div className="text-[10px] font-mono text-text-muted uppercase">Connected Pages</div>
-                      <div className="text-sm font-mono font-bold text-text-primary mt-1">{notionStatus.connectedItemsCount}</div>
-                    </div>
+              <form onSubmit={handleCreateCert} className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-xs font-mono text-gray-400 uppercase mb-1">Badge Acronym *</label>
+                    <input
+                      type="text"
+                      required
+                      value={newCert.name}
+                      onChange={(e) => setNewCert({ ...newCert, name: e.target.value })}
+                      placeholder="e.g. CRTO, OSCP, BSCP"
+                      className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-2 text-sm font-mono text-white focus:border-[#00ff66] focus:outline-none"
+                    />
                   </div>
 
-                  {notionStatus.connectedItemsCount === 0 ? (
-                    <div className="bg-amber-500/10 border border-amber-500/30 rounded p-4 text-xs font-mono text-amber-300 space-y-2">
-                      <div className="font-bold flex items-center gap-2">
-                        <AlertTriangle className="w-4 h-4 text-amber-400" />
-                        HOW TO CONNECT YOUR NOTION WRITEUP PAGES (Takes 15 Seconds):
-                      </div>
-                      <ol className="list-decimal list-inside space-y-1 text-text-muted pl-2">
-                        <li>Open Notion in your workspace <strong className="text-text-primary">&quot;{notionStatus.workspace}&quot;</strong>.</li>
-                        <li>Navigate to your writeups page or database.</li>
-                        <li>Click the <strong className="text-text-primary">&quot;...&quot;</strong> icon in the top right corner.</li>
-                        <li>Scroll down and click <strong className="text-text-primary">Connections</strong> (or <strong className="text-text-primary">Add connections</strong>).</li>
-                        <li>Search for and select <strong className="text-neon-green">&quot;{notionStatus.bot}&quot;</strong>.</li>
-                      </ol>
-                      <p className="text-[11px] text-amber-200 mt-2">
-                        Once you connect it, refresh this page or click &quot;Trigger Sync&quot; below and your writeups will sync into Supabase!
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="bg-green-500/10 border border-green-500/30 rounded p-4 text-xs font-mono text-green-300">
-                      <div className="font-bold flex items-center gap-2 mb-2">
-                        <CheckCircle2 className="w-4 h-4 text-green-400" />
-                        Found {notionStatus.connectedItemsCount} Connected Pages in Notion!
-                      </div>
-                      <ul className="list-disc list-inside space-y-1 text-text-muted">
-                        {notionStatus.items.map((it: any) => (
-                          <li key={it.id}>{it.title} ({it.object})</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
+                  <div>
+                    <label className="block text-xs font-mono text-gray-400 uppercase mb-1">Full Certification Name *</label>
+                    <input
+                      type="text"
+                      required
+                      value={newCert.fullName}
+                      onChange={(e) => setNewCert({ ...newCert, fullName: e.target.value })}
+                      placeholder="e.g. Certified Red Team Operator"
+                      className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-2 text-sm font-mono text-white focus:border-[#00ff66] focus:outline-none"
+                    />
+                  </div>
 
-                  <div className="pt-4 border-t border-border-color">
-                    <button
-                      onClick={async () => {
-                        setLoading(true);
-                        setMessage(null);
-                        try {
-                          const res = await fetch('/api/sync/notion', { method: 'POST' });
-                          const data = await res.json();
-                          if (res.ok) {
-                            setMessage({ type: 'success', text: `Sync completed! Synced: ${data.pagesSynced || 0}, Images re-hosted: ${data.imagesRehosted || 0}` });
-                            fetchData(adminKey);
-                          } else {
-                            setMessage({ type: 'error', text: data.message || 'Sync failed' });
-                          }
-                        } catch (e: any) {
-                          setMessage({ type: 'error', text: e.message });
-                        } finally {
-                          setLoading(false);
-                        }
-                      }}
-                      disabled={loading}
-                      className="px-6 py-2.5 bg-neon-green text-bg-dark font-mono font-bold text-xs rounded hover:bg-neon-green/90 transition-all flex items-center gap-2"
-                    >
-                      {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                      TRIGGER NOTION SYNC NOW
-                    </button>
+                  <div>
+                    <label className="block text-xs font-mono text-gray-400 uppercase mb-1">Issuer *</label>
+                    <input
+                      type="text"
+                      required
+                      value={newCert.issuer}
+                      onChange={(e) => setNewCert({ ...newCert, issuer: e.target.value })}
+                      placeholder="e.g. Zero-Point Security, OffSec"
+                      className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-2 text-sm font-mono text-white focus:border-[#00ff66] focus:outline-none"
+                    />
                   </div>
                 </div>
-              ) : (
-                <div className="text-xs font-mono text-text-muted">Checking Notion API connection...</div>
-              )}
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-xs font-mono text-gray-400 uppercase mb-1">Date / Month</label>
+                    <input
+                      type="text"
+                      value={newCert.date}
+                      onChange={(e) => setNewCert({ ...newCert, date: e.target.value })}
+                      placeholder="e.g. Oct 2024"
+                      className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-2 text-sm font-mono text-white focus:border-[#00ff66] focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-mono text-gray-400 uppercase mb-1">Status</label>
+                    <select
+                      value={newCert.status}
+                      onChange={(e) => setNewCert({ ...newCert, status: e.target.value })}
+                      className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-2 text-sm font-mono text-white focus:border-[#00ff66] focus:outline-none"
+                    >
+                      <option value="earned">Earned</option>
+                      <option value="in-progress">In Progress</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-mono text-gray-400 uppercase mb-1">Badge Color Hex</label>
+                    <input
+                      type="text"
+                      value={newCert.badgeColor}
+                      onChange={(e) => setNewCert({ ...newCert, badgeColor: e.target.value })}
+                      placeholder="#00ff66"
+                      className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-2 text-sm font-mono text-white focus:border-[#00ff66] focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-mono text-gray-400 uppercase mb-1">Skills Covered (Comma separated)</label>
+                  <input
+                    type="text"
+                    value={newCert.skillsCovered}
+                    onChange={(e) => setNewCert({ ...newCert, skillsCovered: e.target.value })}
+                    placeholder="Cobalt Strike, Kerberos, Lateral Movement"
+                    className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-2 text-sm font-mono text-white focus:border-[#00ff66] focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-mono text-gray-400 uppercase mb-1">Description</label>
+                  <textarea
+                    rows={2}
+                    value={newCert.description}
+                    onChange={(e) => setNewCert({ ...newCert, description: e.target.value })}
+                    placeholder="Practical examination scope."
+                    className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-2 text-sm font-mono text-white focus:border-[#00ff66] focus:outline-none"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="px-6 py-2.5 bg-orange-500 text-black font-mono font-bold text-xs rounded-lg hover:bg-orange-400 transition-all flex items-center gap-2"
+                >
+                  <Plus className="w-4 h-4" /> SAVE CERTIFICATION TO LIVE DATABASE
+                </button>
+              </form>
+            </div>
+
+            {/* List of Certs */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {certs.map((c) => (
+                <div key={c.id} className="bg-[#0a0f14] border border-[#1b2631] rounded-xl p-5 flex items-start justify-between gap-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-base font-bold text-white">{c.name}</span>
+                      <span className={`text-[10px] font-mono px-2 py-0.5 rounded font-bold uppercase ${
+                        c.status === 'earned' ? 'bg-[#00ff66]/10 text-[#00ff66] border border-[#00ff66]/30' : 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
+                      }`}>
+                        {c.status}
+                      </span>
+                    </div>
+                    <p className="text-xs font-mono text-gray-300">{c.fullName}</p>
+                    <p className="text-[11px] font-mono text-gray-500">{c.issuer} • {c.date}</p>
+                  </div>
+
+                  <button
+                    onClick={() => handleDeleteCert(c.id, c.name)}
+                    className="p-2 text-gray-500 hover:text-red-400 transition-colors"
+                    title="Delete certificate"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* TAB 5: NOTION IMPORT HUB (Selective Import)                                */}
+        {/* ========================================================================= */}
+        {activeTab === 'notion' && (
+          <div className="space-y-8 max-w-5xl">
+            {/* Notion Status & Explanation */}
+            <div className="bg-[#0a0f14] border border-[#1b2631] rounded-xl p-6">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+                <div>
+                  <h2 className="text-base font-mono font-bold text-purple-400 flex items-center gap-2">
+                    <RefreshCw className="w-5 h-5" /> NOTION NOTES &amp; SELECTIVE IMPORT
+                  </h2>
+                  <p className="text-xs text-gray-400 font-mono mt-1">
+                    Connected to workspace <strong className="text-white">{notionStatus?.workspace || 'HTB MACHINES'}</strong> under integration <strong className="text-purple-400">{notionStatus?.bot || 'website'}</strong>.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => fetchData(adminKey)}
+                    className="px-4 py-2 bg-purple-500/15 border border-purple-500/30 text-purple-300 text-xs font-mono rounded-lg hover:bg-purple-500/25 transition-all flex items-center gap-2"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+                    Refresh Notion Pages
+                  </button>
+                </div>
+              </div>
+
+              {/* Step by step note */}
+              <div className="p-4 rounded-lg bg-[#050708] border border-[#1b2631] text-xs font-mono space-y-2">
+                <div className="text-purple-300 font-bold flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-purple-400" />
+                  How to make notes visible from Notion:
+                </div>
+                <p className="text-gray-400">
+                  In Notion, open any machine or pro lab page in <strong className="text-white">HTB MACHINES</strong> (e.g. inside <em>Medium, Hard, Insane</em>), click <strong className="text-white">&quot;...&quot;</strong> in top right &rarr; <strong className="text-white">Connections</strong> &rarr; Add <strong className="text-purple-400">website</strong>. It will immediately appear in the list below!
+                </p>
+              </div>
+            </div>
+
+            {/* List of Pages in Notion */}
+            <div>
+              <h3 className="text-sm font-mono font-bold text-gray-300 uppercase tracking-wider mb-4 flex items-center gap-2">
+                <FileText className="w-4 h-4 text-[#00ff66]" />
+                DISCOVERED PAGES IN NOTION ({notionPages.length})
+              </h3>
+
+              <div className="space-y-3">
+                {notionPages.map((p) => (
+                  <div key={p.id} className="bg-[#0a0f14] border border-[#1b2631] rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-sm font-bold text-white">{p.title}</span>
+                        {p.alreadySynced ? (
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded font-bold bg-[#00ff66]/10 text-[#00ff66] border border-[#00ff66]/30">
+                            ✓ SYNCED ON SITE
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded font-bold bg-blue-500/10 text-blue-400 border border-blue-500/30">
+                            NEW IN NOTION
+                          </span>
+                        )}
+                        {p.isProLab && (
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded font-bold bg-purple-500/10 text-purple-400 border border-purple-500/30">
+                            PRO LAB
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] font-mono text-gray-500">
+                        Notion ID: {p.id} • Last modified: {p.lastEditedTime?.split('T')[0] || 'Recently'}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        onClick={() => {
+                          setSelectedNotionPage(p);
+                          setImportConfig({
+                            title: p.title,
+                            isProLab: false,
+                            platform: 'HTB',
+                            difficulty: 'Medium',
+                            unlockPassword: handleGeneratePassword(p.title, false),
+                          });
+                        }}
+                        className="px-4 py-2 bg-[#00ff66]/10 hover:bg-[#00ff66]/20 border border-[#00ff66]/30 text-[#00ff66] text-xs font-mono font-bold rounded-lg transition-all flex items-center gap-1.5"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        {p.alreadySynced ? 'RE-IMPORT / UPDATE' : 'IMPORT TO SITE'}
+                      </button>
+
+                      <a
+                        href={p.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="p-2 bg-[#0e141a] hover:bg-[#1b2631] border border-[#1b2631] rounded-lg text-gray-400 hover:text-white transition-all"
+                        title="Open in Notion"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                    </div>
+                  </div>
+                ))}
+
+                {notionPages.length === 0 && (
+                  <div className="text-center py-10 bg-[#0a0f14] border border-[#1b2631] rounded-xl">
+                    <AlertTriangle className="w-8 h-8 text-amber-400 mx-auto mb-2 opacity-50" />
+                    <p className="text-sm font-mono text-gray-400">No pages shared with integration &quot;website&quot; yet.</p>
+                    <p className="text-xs font-mono text-gray-500 mt-1">Share your Notion writeup pages by clicking &quot;...&quot; &rarr; Connections &rarr; website in Notion.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* MODAL: SELECTIVE NOTION PAGE IMPORT                                       */}
+        {/* ========================================================================= */}
+        {selectedNotionPage && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="w-full max-w-xl bg-[#0a0f14] border border-[#00ff66]/40 rounded-2xl p-6 shadow-2xl space-y-5">
+              <div className="flex items-center justify-between border-b border-[#1b2631] pb-3">
+                <div className="flex items-center gap-2.5">
+                  <Download className="w-5 h-5 text-[#00ff66]" />
+                  <h3 className="font-mono text-base font-bold text-white">
+                    IMPORT WRITEUP FROM NOTION
+                  </h3>
+                </div>
+                <button 
+                  onClick={() => setSelectedNotionPage(null)}
+                  className="text-gray-500 hover:text-white text-xs font-mono font-bold"
+                >
+                  ✕ CLOSE
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {/* Pro Lab Checkbox */}
+                <div className="p-3.5 rounded-lg bg-purple-500/10 border border-purple-500/30 flex items-center justify-between">
+                  <div>
+                    <span className="font-mono text-xs font-bold text-purple-300 block">
+                      IS THIS AN HTB PRO LAB?
+                    </span>
+                    <span className="text-[11px] font-mono text-gray-400">
+                      Pro Labs are locked by default and never auto-retire.
+                    </span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={importConfig.isProLab}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setImportConfig(prev => ({
+                        ...prev,
+                        isProLab: checked,
+                        platform: checked ? 'HTB Pro Lab' : 'HTB',
+                        unlockPassword: handleGeneratePassword(prev.title, checked),
+                      }));
+                    }}
+                    className="w-5 h-5 accent-purple-500 rounded cursor-pointer"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-mono text-gray-400 uppercase mb-1">Title / Machine Name</label>
+                  <input
+                    type="text"
+                    value={importConfig.title}
+                    onChange={(e) => setImportConfig({ ...importConfig, title: e.target.value })}
+                    className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-2 text-sm font-mono text-white focus:border-[#00ff66] focus:outline-none"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-mono text-gray-400 uppercase mb-1">Platform</label>
+                    <select
+                      value={importConfig.platform}
+                      onChange={(e) => setImportConfig({ ...importConfig, platform: e.target.value })}
+                      className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-2 text-sm font-mono text-white focus:border-[#00ff66] focus:outline-none"
+                    >
+                      <option value="HTB">Hack The Box</option>
+                      <option value="HTB Pro Lab">HTB Pro Lab</option>
+                      <option value="THM">TryHackMe</option>
+                      <option value="Proving Grounds">Proving Grounds</option>
+                      <option value="Other">Other CTF</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-mono text-gray-400 uppercase mb-1">Difficulty</label>
+                    <select
+                      value={importConfig.difficulty}
+                      onChange={(e) => setImportConfig({ ...importConfig, difficulty: e.target.value })}
+                      className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-2 text-sm font-mono text-white focus:border-[#00ff66] focus:outline-none"
+                    >
+                      <option value="Easy">Easy</option>
+                      <option value="Medium">Medium</option>
+                      <option value="Hard">Hard</option>
+                      <option value="Insane">Insane</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-mono text-[#00ff66] uppercase font-bold">
+                      Unlock Passphrase:
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setImportConfig(prev => ({ ...prev, unlockPassword: handleGeneratePassword(prev.title, prev.isProLab) }))}
+                      className="text-[11px] font-mono text-[#00ff66] hover:underline"
+                    >
+                      Regenerate Flag
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    value={importConfig.unlockPassword}
+                    onChange={(e) => setImportConfig({ ...importConfig, unlockPassword: e.target.value })}
+                    className="w-full bg-[#050708] border border-[#00ff66]/40 rounded-lg px-3 py-2 text-sm font-mono text-[#00ff66] focus:border-[#00ff66] focus:outline-none"
+                  />
+                  <p className="text-[10px] font-mono text-gray-500 mt-1">
+                    Saved in your Password Vault so you can retrieve and copy it anytime.
+                  </p>
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-[#1b2631] flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setSelectedNotionPage(null)}
+                  className="px-4 py-2 bg-[#0e141a] border border-[#1b2631] text-xs font-mono rounded-lg text-gray-400 hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleImportNotionPage}
+                  disabled={loading}
+                  className="px-5 py-2 bg-[#00ff66] text-[#050708] font-mono font-bold text-xs rounded-lg hover:bg-[#00ff66]/90 transition-all flex items-center gap-2"
+                >
+                  {loading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                  IMPORT &amp; REHOST SCREENSHOTS
+                </button>
+              </div>
             </div>
           </div>
         )}

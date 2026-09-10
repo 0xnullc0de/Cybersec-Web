@@ -1,4 +1,4 @@
-export type Platform = 'HTB' | 'THM' | 'Proving Grounds' | 'CTF' | 'Other';
+export type Platform = 'HTB' | 'HTB Pro Lab' | 'THM' | 'Proving Grounds' | 'CTF' | 'Other';
 export type Difficulty = 'Easy' | 'Medium' | 'Hard' | 'Insane';
 export type OperatingSystem = 'Linux' | 'Windows' | 'Active Directory' | 'FreeBSD' | 'Multi';
 
@@ -12,6 +12,7 @@ export interface Writeup {
   datePublished: string;
   retirementDate: string | null;
   isRetired: boolean;
+  isProLab?: boolean;
   summary: string;
   initialAccessVector: string;
   privEscVector: string;
