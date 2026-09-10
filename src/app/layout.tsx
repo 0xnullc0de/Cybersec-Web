@@ -4,8 +4,16 @@ import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import { siteConfig } from "@/data/siteConfig";
 
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || (
+  process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://nullbyte.vercel.app'
+);
+
 export const metadata: Metadata = {
-  title: `${siteConfig.name} | Offensive Security & CTF Writeup Vault`,
+  metadataBase: new URL(siteUrl),
+  title: {
+    default: `${siteConfig.name} | Offensive Security & CTF Writeup Vault`,
+    template: `%s | ${siteConfig.handle}`,
+  },
   description: siteConfig.bio,
   keywords: [
     "offensive security",
@@ -16,8 +24,40 @@ export const metadata: Metadata = {
     "penetration testing",
     "OSCP",
     "CRTO",
+    "HTB Pro Labs",
+    "Nullbyt3",
+    "CTF walkthroughs",
   ],
-  authors: [{ name: siteConfig.name }],
+  authors: [{ name: siteConfig.name, url: siteUrl }],
+  creator: siteConfig.handle,
+  openGraph: {
+    type: "website",
+    locale: "en_US",
+    url: siteUrl,
+    title: `${siteConfig.name} | Offensive Security & CTF Writeup Vault`,
+    description: siteConfig.bio,
+    siteName: `${siteConfig.handle} Security Vault`,
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: `${siteConfig.name} | Offensive Security Vault`,
+    description: siteConfig.bio,
+    creator: "@Nullbyt3_sec",
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      'max-video-preview': -1,
+      'max-image-preview': 'large',
+      'max-snippet': -1,
+    },
+  },
+  verification: {
+    google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION || undefined,
+  },
 };
 
 export const viewport: Viewport = {
