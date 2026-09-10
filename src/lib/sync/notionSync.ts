@@ -107,91 +107,134 @@ async function parseNotionBlocksToMarkdown(
   slug: string,
   rehostedImages: string[]
 ): Promise<string> {
-  const blocksResponse = await notion.blocks.children.list({
-    block_id: blockId,
-    page_size: 100,
-  });
-
   const lines: string[] = [];
+  let cursor: string | undefined = undefined;
 
-  for (const block of blocksResponse.results as any[]) {
-    const type = block.type;
+  do {
+    const blocksResponse: any = await notion.blocks.children.list({
+      block_id: blockId,
+      page_size: 100,
+      start_cursor: cursor,
+    });
 
-    switch (type) {
-      case 'heading_1':
-        lines.push(`\n# ${getPlainText(block.heading_1.rich_text)}\n`);
-        break;
+    for (const block of blocksResponse.results as any[]) {
+      const type = block.type;
 
-      case 'heading_2':
-        lines.push(`\n## ${getPlainText(block.heading_2.rich_text)}\n`);
-        break;
+      switch (type) {
+        case 'heading_1':
+          lines.push(`\n# ${getPlainText(block.heading_1.rich_text)}\n`);
+          break;
 
-      case 'heading_3':
-        lines.push(`\n### ${getPlainText(block.heading_3.rich_text)}\n`);
-        break;
+        case 'heading_2':
+          lines.push(`\n## ${getPlainText(block.heading_2.rich_text)}\n`);
+          break;
 
-      case 'paragraph': {
-        const text = getPlainText(block.paragraph.rich_text);
-        if (text) lines.push(text);
-        break;
-      }
+        case 'heading_3':
+          lines.push(`\n### ${getPlainText(block.heading_3.rich_text)}\n`);
+          break;
 
-      case 'bulleted_list_item':
-        lines.push(`- ${getPlainText(block.bulleted_list_item.rich_text)}`);
-        break;
+        case 'paragraph': {
+          const text = getPlainText(block.paragraph.rich_text);
+          if (text) lines.push(text);
+          break;
+        }
 
-      case 'numbered_list_item':
-        lines.push(`1. ${getPlainText(block.numbered_list_item.rich_text)}`);
-        break;
+        case 'bulleted_list_item':
+          lines.push(`- ${getPlainText(block.bulleted_list_item.rich_text)}`);
+          break;
 
-      case 'quote':
-        lines.push(`> ${getPlainText(block.quote.rich_text)}`);
-        break;
+        case 'numbered_list_item':
+          lines.push(`1. ${getPlainText(block.numbered_list_item.rich_text)}`);
+          break;
 
-      case 'divider':
-        lines.push('\n---\n');
-        break;
+        case 'to_do': {
+          const checked = Boolean(block.to_do?.checked);
+          const todoText = getPlainText(block.to_do?.rich_text);
+          lines.push(`- [${checked ? 'x' : ' '}] ${todoText}`);
+          break;
+        }
 
-      // ─── CODE / TERMINAL COMMAND BLOCK ──────────────────────────────────
-      // Crucial requirement: code blocks are preserved and tagged as
-      // distinct command elements (e.g. ```bash:command) rather than plain text
-      case 'code': {
-        const codeText = getPlainText(block.code.rich_text);
-        const language = block.code.language || 'bash';
-        // Tag as terminal command block
-        lines.push(`\n\`\`\`${language}:command\n${codeText}\n\`\`\`\n`);
-        break;
-      }
-
-      // ─── EMBEDDED IMAGES / SCREENSHOTS ───────────────────────────────────
-      // Crucial requirement: download from expiring Notion URL and re-upload
-      // to permanent Supabase Storage bucket 'writeup-images'
-      case 'image': {
-        const imageUrl = block.image.file?.url || block.image.external?.url;
-        const caption = getPlainText(block.image.caption) || 'Exploitation Screenshot';
-
-        if (imageUrl) {
-          const permUrl = await rehostNotionImage(imageUrl, slug, block.id);
-          if (permUrl) {
-            rehostedImages.push(permUrl);
-            lines.push(`\n![${caption}](${permUrl})\n`);
-          } else {
-            // Fallback to original if rehost fails
-            lines.push(`\n![${caption}](${imageUrl})\n`);
+        case 'toggle': {
+          const toggleTitle = getPlainText(block.toggle?.rich_text);
+          if (toggleTitle) {
+            lines.push(`\n<details>\n<summary><strong>${toggleTitle}</strong></summary>\n`);
           }
+          if (block.has_children) {
+            const nested = await parseNotionBlocksToMarkdown(notion, block.id, slug, rehostedImages);
+            if (nested) lines.push(nested);
+          }
+          if (toggleTitle) {
+            lines.push(`\n</details>\n`);
+          }
+          break;
         }
-        break;
-      }
 
-      default:
-        // Handle child blocks if nested
-        if (block.has_children) {
-          const nested = await parseNotionBlocksToMarkdown(notion, block.id, slug, rehostedImages);
-          if (nested) lines.push(nested);
+        case 'callout': {
+          const calloutText = getPlainText(block.callout?.rich_text);
+          const icon = block.callout?.icon?.emoji || '💡';
+          lines.push(`\n> ${icon} **Note:** ${calloutText}\n`);
+          break;
         }
-        break;
+
+        case 'quote':
+          lines.push(`> ${getPlainText(block.quote.rich_text)}`);
+          break;
+
+        case 'divider':
+          lines.push('\n---\n');
+          break;
+
+        // ─── CHILD PAGES & DATABASES ─────────────────────────────────────
+        // CRITICAL: Child pages represent separate individual machine writeups
+        // (e.g. Flight or DARKZERORETURNS inside category folder Hard).
+        // Never recursively swallow child pages into the current writeup.
+        case 'child_page':
+        case 'child_database':
+          break;
+
+        // ─── CODE / TERMINAL COMMAND BLOCK ──────────────────────────────────
+        // Crucial requirement: code blocks are preserved and tagged as
+        // distinct command elements (e.g. ```bash:command) rather than plain text
+        case 'code': {
+          const codeText = getPlainText(block.code.rich_text);
+          const language = block.code.language || 'bash';
+          // Tag as terminal command block
+          lines.push(`\n\`\`\`${language}:command\n${codeText}\n\`\`\`\n`);
+          break;
+        }
+
+        // ─── EMBEDDED IMAGES / SCREENSHOTS ───────────────────────────────────
+        // Crucial requirement: download from expiring Notion URL and re-upload
+        // to permanent Supabase Storage bucket 'writeup-images'
+        case 'image': {
+          const imageUrl = block.image.file?.url || block.image.external?.url;
+          const caption = getPlainText(block.image.caption) || 'Exploitation Screenshot';
+
+          if (imageUrl) {
+            const permUrl = await rehostNotionImage(imageUrl, slug, block.id);
+            if (permUrl) {
+              rehostedImages.push(permUrl);
+              lines.push(`\n![${caption}](${permUrl})\n`);
+            } else {
+              // Fallback to original if rehost fails
+              lines.push(`\n![${caption}](${imageUrl})\n`);
+            }
+          }
+          break;
+        }
+
+        default:
+          // Handle other nested child blocks
+          if (block.has_children) {
+            const nested = await parseNotionBlocksToMarkdown(notion, block.id, slug, rehostedImages);
+            if (nested) lines.push(nested);
+          }
+          break;
+      }
     }
-  }
+
+    cursor = blocksResponse.has_more ? blocksResponse.next_cursor : undefined;
+  } while (cursor);
 
   return lines.join('\n\n');
 }
@@ -273,6 +316,8 @@ export async function syncNotionToWriteups(): Promise<SyncStats> {
         else if (page.title) title = getPlainText(page.title);
 
         if (!title || title === 'Untitled Writeup') continue;
+        const normalized = title.toLowerCase().replace(/^[^\w\s]+/, '').trim();
+        if (['hard', 'medium', 'easy', 'insane'].includes(normalized)) continue;
 
         // Extract Slug
         let slug = '';
@@ -421,29 +466,71 @@ export async function syncNotionToWriteups(): Promise<SyncStats> {
 
 /**
  * Lists all pages accessible in the Notion workspace so the user can select which to import.
+ * Traverses parent categories (Hard, Medium, Easy, Insane) and identifies individual machines.
  */
 export async function listNotionPages(): Promise<any[]> {
   const token = getNotionToken();
   if (!token) return [];
   const notion = new Client({ auth: token });
   try {
-    const searchRes = await notion.search({
-      filter: { property: 'object', value: 'page' },
-      page_size: 100,
-    });
+    const allPages: any[] = [];
+    let cursor: string | undefined = undefined;
 
-    return searchRes.results.map((page: any) => {
+    do {
+      const searchRes: any = await notion.search({
+        filter: { property: 'object', value: 'page' },
+        page_size: 100,
+        start_cursor: cursor,
+      });
+      allPages.push(...searchRes.results);
+      cursor = searchRes.has_more ? searchRes.next_cursor : undefined;
+    } while (cursor);
+
+    // Build title map for parent resolution
+    const titleMap = new Map<string, string>();
+    for (const page of allPages) {
       const props = page.properties || {};
-      let title = 'Untitled Page';
+      let title = '';
       if (props.Title?.title) title = getPlainText(props.Title.title);
       else if (props.title?.title) title = getPlainText(props.title.title);
       else if (props.Name?.title) title = getPlainText(props.Name.title);
       else if (props.name?.title) title = getPlainText(props.name.title);
       else if (page.title) title = getPlainText(page.title);
+      titleMap.set(page.id, title.trim());
+    }
+
+    return allPages.map((page: any) => {
+      const title = titleMap.get(page.id) || 'Untitled';
+      const parent = page.parent;
+      let category = 'Other';
+      let isContainer = false;
+
+      if (parent?.type === 'page_id') {
+        const parentTitle = titleMap.get(parent.page_id) || '';
+        if (/hard/i.test(parentTitle)) category = 'Hard';
+        else if (/medium/i.test(parentTitle)) category = 'Medium';
+        else if (/easy/i.test(parentTitle)) category = 'Easy';
+        else if (/insane/i.test(parentTitle)) category = 'Insane';
+        else if (parentTitle) category = parentTitle.replace(/^[^\w\s]+/, '').trim();
+      } else if (parent?.type === 'workspace') {
+        if (/hard/i.test(title)) { category = 'Hard'; isContainer = true; }
+        else if (/medium/i.test(title)) { category = 'Medium'; isContainer = true; }
+        else if (/easy/i.test(title)) { category = 'Easy'; isContainer = true; }
+        else if (/insane/i.test(title)) { category = 'Insane'; isContainer = true; }
+      }
+
+      // Also check if title itself is a known category name
+      const cleanTitle = title.replace(/^[^\w\s]+/, '').trim().toLowerCase();
+      if (['hard', 'medium', 'easy', 'insane'].includes(cleanTitle)) {
+        isContainer = true;
+      }
 
       return {
         id: page.id,
         title: title || 'Untitled',
+        category,
+        isContainer,
+        parentTitle: parent?.page_id ? (titleMap.get(parent.page_id) || null) : null,
         createdTime: page.created_time,
         lastEditedTime: page.last_edited_time,
         url: page.url,
@@ -495,7 +582,25 @@ export async function importSingleNotionPage(
   // Resolve slug
   const isProLab = Boolean(overrides.isProLab);
   const platform = overrides.platform || (isProLab ? 'HTB Pro Lab' : (props.Platform?.select?.name || 'HTB'));
-  const difficulty = overrides.difficulty || props.Difficulty?.select?.name || (isProLab ? 'Hard' : 'Medium');
+
+  // Auto-infer difficulty from parent category if not explicitly provided
+  let inferredDifficulty = 'Medium';
+  if (page.parent?.type === 'page_id') {
+    try {
+      const parentPage: any = await notion.pages.retrieve({ page_id: page.parent.page_id });
+      const parentProps = parentPage.properties || {};
+      let parentTitle = '';
+      if (parentProps.title?.title) parentTitle = getPlainText(parentProps.title.title);
+      else if (parentProps.Title?.title) parentTitle = getPlainText(parentProps.Title.title);
+      else if (parentProps.Name?.title) parentTitle = getPlainText(parentProps.Name.title);
+      if (/hard/i.test(parentTitle)) inferredDifficulty = 'Hard';
+      else if (/easy/i.test(parentTitle)) inferredDifficulty = 'Easy';
+      else if (/insane/i.test(parentTitle)) inferredDifficulty = 'Insane';
+      else if (/medium/i.test(parentTitle)) inferredDifficulty = 'Medium';
+    } catch (e) {}
+  }
+
+  const difficulty = overrides.difficulty || props.Difficulty?.select?.name || (isProLab ? 'Hard' : inferredDifficulty);
   const os = overrides.os || props.OS?.select?.name || (isProLab ? 'Active Directory' : 'Linux');
   const tags = overrides.tags || props.Tags?.multi_select?.map((t: any) => t.name) || [isProLab ? 'Pro Lab' : 'CTF'];
   const summary = overrides.summary || getPlainText(props.Summary?.rich_text) || `${title} enterprise walkthrough.`;

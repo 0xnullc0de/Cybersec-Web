@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Shield, Key, Lock, Unlock, Plus, RefreshCw, Check, Copy, 
   Trash2, ExternalLink, Terminal, AlertTriangle, FileText, 
-  Award, Eye, CheckCircle2, Server, Download, Globe, Sparkles
+  Award, Eye, CheckCircle2, Server, Download, Globe, Sparkles, Folder
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -18,6 +18,7 @@ export default function AdminPage() {
   const [certs, setCerts] = useState<any[]>([]);
   const [notionStatus, setNotionStatus] = useState<any>(null);
   const [notionPages, setNotionPages] = useState<any[]>([]);
+  const [notionCategoryFilter, setNotionCategoryFilter] = useState<string>('all');
   const [loading, setLoading] = useState(false);
   const [copiedSlug, setCopiedSlug] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -1113,83 +1114,168 @@ export default function AdminPage() {
               <div className="p-4 rounded-lg bg-[#050708] border border-[#1b2631] text-xs font-mono space-y-2">
                 <div className="text-purple-300 font-bold flex items-center gap-2">
                   <AlertTriangle className="w-4 h-4 text-purple-400" />
-                  How to make notes visible from Notion:
+                  How to make Easy, Insane, and new notes visible:
                 </div>
                 <p className="text-gray-400">
-                  In Notion, open any machine or pro lab page in <strong className="text-white">HTB MACHINES</strong> (e.g. inside <em>Medium, Hard, Insane</em>), click <strong className="text-white">&quot;...&quot;</strong> in top right &rarr; <strong className="text-white">Connections</strong> &rarr; Add <strong className="text-purple-400">website</strong>. It will immediately appear in the list below!
+                  In your Notion Developers dashboard &rarr; integration <strong className="text-purple-400">website</strong> &rarr; <strong className="text-white">Content access</strong> tab: click <strong className="text-[#00ff66]">&quot;+ Add pages &amp; databases&quot;</strong> and add <strong className="text-white">🟢 Easy</strong> and <strong className="text-white">💥 Insane</strong>. Once added, click <strong className="text-purple-400">&quot;Refresh Notion Pages&quot;</strong> above!
                 </p>
+                <p className="text-gray-500 text-[11px]">
+                  💡 <em>Note:</em> In Notion, <span className="text-amber-400">Hard</span>, <span className="text-yellow-400">Medium</span>, <span className="text-green-400">Easy</span>, and <span className="text-red-400">Insane</span> are category folders. Import individual machine pages inside each folder (e.g. <em>Flight</em>, <em>DARKZERORETURNS</em>) separately.
+                </p>
+              </div>
+            </div>
+
+            {/* Category Filter & Stats */}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-2">
+                {['all', 'hard', 'medium', 'easy', 'insane'].map((cat) => {
+                  const count = cat === 'all'
+                    ? notionPages.filter(p => !p.isContainer).length
+                    : notionPages.filter(p => !p.isContainer && p.category?.toLowerCase() === cat).length;
+                  const active = notionCategoryFilter === cat;
+                  return (
+                    <button
+                      key={cat}
+                      onClick={() => setNotionCategoryFilter(cat)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all ${
+                        active
+                          ? 'bg-[#00ff66] text-[#050708]'
+                          : 'bg-[#0a0f14] border border-[#1b2631] text-gray-400 hover:text-white hover:border-gray-600'
+                      }`}
+                    >
+                      {cat.toUpperCase()} ({count})
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="text-xs font-mono text-gray-500">
+                Showing {notionPages.filter(p => {
+                  if (notionCategoryFilter === 'all') return true;
+                  return p.category?.toLowerCase() === notionCategoryFilter.toLowerCase();
+                }).length} item(s)
               </div>
             </div>
 
             {/* List of Pages in Notion */}
             <div>
-              <h3 className="text-sm font-mono font-bold text-gray-300 uppercase tracking-wider mb-4 flex items-center gap-2">
-                <FileText className="w-4 h-4 text-[#00ff66]" />
-                DISCOVERED PAGES IN NOTION ({notionPages.length})
-              </h3>
-
               <div className="space-y-3">
-                {notionPages.map((p) => (
-                  <div key={p.id} className="bg-[#0a0f14] border border-[#1b2631] rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-sm font-bold text-white">{p.title}</span>
-                        {p.alreadySynced ? (
-                          <span className="text-[10px] font-mono px-2 py-0.5 rounded font-bold bg-[#00ff66]/10 text-[#00ff66] border border-[#00ff66]/30">
-                            ✓ SYNCED ON SITE
-                          </span>
-                        ) : (
-                          <span className="text-[10px] font-mono px-2 py-0.5 rounded font-bold bg-blue-500/10 text-blue-400 border border-blue-500/30">
-                            NEW IN NOTION
-                          </span>
-                        )}
-                        {p.isProLab && (
-                          <span className="text-[10px] font-mono px-2 py-0.5 rounded font-bold bg-purple-500/10 text-purple-400 border border-purple-500/30">
-                            PRO LAB
-                          </span>
-                        )}
+                {notionPages
+                  .filter(p => {
+                    if (notionCategoryFilter === 'all') return true;
+                    return p.category?.toLowerCase() === notionCategoryFilter.toLowerCase();
+                  })
+                  .map((p) => {
+                    if (p.isContainer) {
+                      return (
+                        <div key={p.id} className="bg-[#050708] border border-[#1b2631] rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 opacity-75">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 rounded-lg bg-yellow-500/10 border border-yellow-500/30 text-yellow-400">
+                              <Folder className="w-4 h-4" />
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono text-sm font-bold text-gray-300">{p.title}</span>
+                                <span className="text-[10px] font-mono px-2 py-0.5 rounded font-bold bg-gray-800 text-gray-400 border border-gray-700">
+                                  CATEGORY FOLDER
+                                </span>
+                              </div>
+                              <p className="text-[11px] font-mono text-gray-500 mt-0.5">
+                                Category container — select individual machine writeups below to import
+                              </p>
+                            </div>
+                          </div>
+                          <a
+                            href={p.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-2 bg-[#0e141a] hover:bg-[#1b2631] border border-[#1b2631] rounded-lg text-gray-400 hover:text-white transition-all self-end sm:self-auto"
+                            title="Open in Notion"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </a>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div key={p.id} className="bg-[#0a0f14] border border-[#1b2631] hover:border-[#00ff66]/30 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all">
+                        <div className="space-y-1.5">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-mono text-sm font-bold text-white">{p.title}</span>
+                            {p.category && (
+                              <span className={`text-[10px] font-mono px-2 py-0.5 rounded font-bold ${
+                                p.category.toLowerCase() === 'hard'
+                                  ? 'bg-red-500/10 text-red-400 border border-red-500/30'
+                                  : p.category.toLowerCase() === 'medium'
+                                  ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/30'
+                                  : p.category.toLowerCase() === 'easy'
+                                  ? 'bg-green-500/10 text-[#00ff66] border border-[#00ff66]/30'
+                                  : 'bg-purple-500/10 text-purple-400 border border-purple-500/30'
+                              }`}>
+                                {p.category.toUpperCase()}
+                              </span>
+                            )}
+                            {p.alreadySynced ? (
+                              <span className="text-[10px] font-mono px-2 py-0.5 rounded font-bold bg-[#00ff66]/10 text-[#00ff66] border border-[#00ff66]/30 flex items-center gap-1">
+                                <Check className="w-3 h-3" /> SYNCED ON SITE
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-mono px-2 py-0.5 rounded font-bold bg-blue-500/10 text-blue-400 border border-blue-500/30">
+                                NEW IN NOTION
+                              </span>
+                            )}
+                            {p.isProLab && (
+                              <span className="text-[10px] font-mono px-2 py-0.5 rounded font-bold bg-purple-500/10 text-purple-400 border border-purple-500/30">
+                                PRO LAB
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] font-mono text-gray-500">
+                            {p.parentTitle ? `Folder: ${p.parentTitle} • ` : ''}Last edited: {p.lastEditedTime?.split('T')[0] || 'Recently'}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            onClick={() => {
+                              setSelectedNotionPage(p);
+                              const defaultDiff = ['Easy', 'Medium', 'Hard', 'Insane'].find(
+                                d => d.toLowerCase() === p.category?.toLowerCase()
+                              ) || 'Medium';
+                              setImportConfig({
+                                title: p.title,
+                                isProLab: false,
+                                platform: 'HTB',
+                                difficulty: defaultDiff,
+                                unlockPassword: handleGeneratePassword(p.title, false),
+                              });
+                            }}
+                            className="px-4 py-2 bg-[#00ff66]/10 hover:bg-[#00ff66]/20 border border-[#00ff66]/30 text-[#00ff66] text-xs font-mono font-bold rounded-lg transition-all flex items-center gap-1.5"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                            {p.alreadySynced ? 'RE-IMPORT / UPDATE' : 'IMPORT TO SITE'}
+                          </button>
+
+                          <a
+                            href={p.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-2 bg-[#0e141a] hover:bg-[#1b2631] border border-[#1b2631] rounded-lg text-gray-400 hover:text-white transition-all"
+                            title="Open in Notion"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </a>
+                        </div>
                       </div>
-                      <p className="text-[11px] font-mono text-gray-500">
-                        Notion ID: {p.id} • Last modified: {p.lastEditedTime?.split('T')[0] || 'Recently'}
-                      </p>
-                    </div>
-
-                    <div className="flex items-center gap-2 shrink-0">
-                      <button
-                        onClick={() => {
-                          setSelectedNotionPage(p);
-                          setImportConfig({
-                            title: p.title,
-                            isProLab: false,
-                            platform: 'HTB',
-                            difficulty: 'Medium',
-                            unlockPassword: handleGeneratePassword(p.title, false),
-                          });
-                        }}
-                        className="px-4 py-2 bg-[#00ff66]/10 hover:bg-[#00ff66]/20 border border-[#00ff66]/30 text-[#00ff66] text-xs font-mono font-bold rounded-lg transition-all flex items-center gap-1.5"
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                        {p.alreadySynced ? 'RE-IMPORT / UPDATE' : 'IMPORT TO SITE'}
-                      </button>
-
-                      <a
-                        href={p.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="p-2 bg-[#0e141a] hover:bg-[#1b2631] border border-[#1b2631] rounded-lg text-gray-400 hover:text-white transition-all"
-                        title="Open in Notion"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                      </a>
-                    </div>
-                  </div>
-                ))}
+                    );
+                  })}
 
                 {notionPages.length === 0 && (
                   <div className="text-center py-10 bg-[#0a0f14] border border-[#1b2631] rounded-xl">
                     <AlertTriangle className="w-8 h-8 text-amber-400 mx-auto mb-2 opacity-50" />
                     <p className="text-sm font-mono text-gray-400">No pages shared with integration &quot;website&quot; yet.</p>
-                    <p className="text-xs font-mono text-gray-500 mt-1">Share your Notion writeup pages by clicking &quot;...&quot; &rarr; Connections &rarr; website in Notion.</p>
+                    <p className="text-xs font-mono text-gray-500 mt-1">Share your Notion writeup pages by adding them in Content access under your integration.</p>
                   </div>
                 )}
               </div>
