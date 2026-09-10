@@ -413,7 +413,7 @@ export default function AdminPage() {
                   type="password"
                   value={adminKey}
                   onChange={(e) => setAdminKey(e.target.value)}
-                  placeholder="Enter admin key (default: nulbyt3-root)"
+                  placeholder="Enter administrative passphrase"
                   className="w-full bg-[#050708] border border-[#1b2631] rounded-lg pl-10 pr-3 py-2.5 text-sm font-mono focus:border-[#00ff66] focus:outline-none text-[#00ff66] placeholder:text-gray-600"
                   autoFocus
                 />
