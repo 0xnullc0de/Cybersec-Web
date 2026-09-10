@@ -20,7 +20,7 @@ export default function WriteupsPage() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
   React.useEffect(() => {
-    fetch('/api/writeups')
+    fetch(`/api/writeups?_t=${Date.now()}`, { cache: 'no-store' })
       .then((res) => res.json())
       .then((data) => {
         if (Array.isArray(data) && data.length > 0) {

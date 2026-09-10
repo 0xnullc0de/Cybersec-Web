@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { revalidatePath } from 'next/cache';
 import bcrypt from 'bcryptjs';
 import { supabase, supabaseAdmin } from '@/lib/supabase';
 
@@ -62,9 +63,11 @@ export async function PATCH(
       .select()
       .single();
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+    if (data?.slug) {
+      try { revalidatePath(`/writeups/${data.slug}`); } catch (_) {}
     }
+    try { revalidatePath('/writeups'); } catch (_) {}
+    try { revalidatePath('/'); } catch (_) {}
 
     return NextResponse.json({ success: true, writeup: data });
   } catch (err: any) {
@@ -89,6 +92,9 @@ export async function DELETE(
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
+
+    try { revalidatePath('/writeups'); } catch (_) {}
+    try { revalidatePath('/'); } catch (_) {}
 
     return NextResponse.json({ success: true, message: 'Writeup deleted' });
   } catch (err: any) {

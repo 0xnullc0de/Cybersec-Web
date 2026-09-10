@@ -36,7 +36,7 @@ export function mapDbToWriteup(row: any): Writeup {
     tags: row.tags || [],
     datePublished: row.date_published,
     retirementDate: row.retirement_date,
-    isRetired: Boolean(row.is_retired),
+    isRetired: isWriteupRetired(row),
     isProLab: Boolean(row.is_pro_lab),
     points: row.points || 0,
     ipAddress: row.ip_address || '',

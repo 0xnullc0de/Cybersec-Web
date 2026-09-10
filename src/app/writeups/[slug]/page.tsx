@@ -28,11 +28,8 @@ interface WriteupPageProps {
   };
 }
 
-export function generateStaticParams() {
-  return writeups.map((w) => ({
-    slug: w.slug,
-  }));
-}
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export default async function WriteupDetailPage({ params }: WriteupPageProps) {
   const writeup = await getWriteupBySlug(params.slug);

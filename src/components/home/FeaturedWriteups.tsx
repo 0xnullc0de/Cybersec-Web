@@ -1,12 +1,15 @@
 import React from 'react';
 import Link from 'next/link';
-import { writeups } from '@/data/writeups';
+import { getWriteups } from '@/lib/supabase';
 import WriteupCard from '@/components/writeups/WriteupCard';
 import SectionHeader from '@/components/ui/SectionHeader';
-import { ArrowRight, Terminal } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 
-export default function FeaturedWriteups() {
-  const featured = writeups.slice(0, 3);
+export default async function FeaturedWriteups() {
+  const writeupsList = await getWriteups();
+  const featured = writeupsList.filter(w => w.featured).length > 0
+    ? writeupsList.filter(w => w.featured).slice(0, 3)
+    : writeupsList.slice(0, 3);
 
   return (
     <section className="py-16 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

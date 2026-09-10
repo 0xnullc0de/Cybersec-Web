@@ -8,6 +8,9 @@ import SectionHeader from '@/components/ui/SectionHeader';
 import Link from 'next/link';
 import { ArrowRight, Shield, Award, Terminal } from 'lucide-react';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export default function HomePage() {
   return (
     <div className="space-y-6 pb-20">
