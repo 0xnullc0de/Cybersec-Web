@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Shield, Key, Lock, Unlock, Plus, RefreshCw, Check, Copy, 
   Trash2, ExternalLink, Terminal, AlertTriangle, FileText, 
-  Award, Eye, CheckCircle2, Server, Download, Globe, Sparkles, Folder
+  Award, Eye, CheckCircle2, Server, Download, Globe, Sparkles, Folder, Edit3
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -23,6 +23,9 @@ export default function AdminPage() {
   const [copiedSlug, setCopiedSlug] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  // Edit Writeup Modal state
+  const [editingWriteup, setEditingWriteup] = useState<any | null>(null);
+
   // Import Modal state
   const [selectedNotionPage, setSelectedNotionPage] = useState<any | null>(null);
   const [importConfig, setImportConfig] = useState({
@@ -30,6 +33,11 @@ export default function AdminPage() {
     isProLab: false,
     platform: 'HTB',
     difficulty: 'Medium',
+    os: 'Linux',
+    tags: '',
+    summary: '',
+    initialAccessVector: '',
+    privEscVector: '',
     unlockPassword: '',
   });
 
@@ -202,6 +210,11 @@ export default function AdminPage() {
             isProLab: importConfig.isProLab,
             platform: importConfig.isProLab ? 'HTB Pro Lab' : importConfig.platform,
             difficulty: importConfig.difficulty,
+            os: importConfig.os,
+            tags: importConfig.tags,
+            summary: importConfig.summary,
+            initialAccessVector: importConfig.initialAccessVector,
+            privEscVector: importConfig.privEscVector,
             unlockPassword: importConfig.unlockPassword,
           },
         }),
@@ -221,6 +234,48 @@ export default function AdminPage() {
       }
     } catch (e: any) {
       setMessage({ type: 'error', text: e.message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUpdateWriteup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingWriteup) return;
+    setLoading(true);
+    setMessage(null);
+    try {
+      const res = await fetch(`/api/admin/writeups/${editingWriteup.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-key': adminKey,
+        },
+        body: JSON.stringify({
+          title: editingWriteup.title,
+          platform: editingWriteup.platform,
+          difficulty: editingWriteup.difficulty,
+          os: editingWriteup.os,
+          summary: editingWriteup.summary,
+          initialAccessVector: editingWriteup.initial_access_vector,
+          privEscVector: editingWriteup.priv_esc_vector,
+          tags: editingWriteup.tags,
+          unlockPassword: editingWriteup.unlock_password,
+          isProLab: editingWriteup.is_pro_lab,
+          isRetired: editingWriteup.is_retired,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setMessage({ type: 'success', text: `Successfully updated writeup "${editingWriteup.title}"!` });
+        setEditingWriteup(null);
+        fetchData(adminKey);
+      } else {
+        setMessage({ type: 'error', text: data.error || 'Update failed' });
+      }
+    } catch (err: any) {
+      setMessage({ type: 'error', text: err.message });
     } finally {
       setLoading(false);
     }
@@ -688,7 +743,7 @@ export default function AdminPage() {
           <div className="space-y-4">
             {writeups.map((w) => (
               <div key={w.slug} className="bg-[#0a0f14] border border-[#1b2631] hover:border-[#00ff66]/30 rounded-xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all">
-                <div className="space-y-1.5">
+                <div className="space-y-1.5 flex-1">
                   <div className="flex items-center gap-2">
                     {w.is_pro_lab ? (
                       <span className="px-2 py-0.5 text-[10px] font-mono font-bold rounded bg-purple-500/15 text-purple-400 border border-purple-500/30">
@@ -707,9 +762,39 @@ export default function AdminPage() {
                   </div>
                   <h3 className="text-base font-mono font-bold text-white">{w.title}</h3>
                   <p className="text-xs text-gray-400 font-mono line-clamp-1">{w.summary}</p>
+
+                  {/* Vectors & Tags */}
+                  <div className="pt-2 border-t border-[#1b2631]/60 space-y-1 text-xs font-mono">
+                    <div className="flex items-start gap-2">
+                      <span className="text-[#00ff66] font-bold text-[11px] shrink-0">FOOTHOLD:</span>
+                      <span className="text-gray-300 text-[11px] line-clamp-1">{w.initial_access_vector || 'Not specified'}</span>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <span className="text-amber-400 font-bold text-[11px] shrink-0">PRIVESC:</span>
+                      <span className="text-gray-300 text-[11px] line-clamp-1">{w.priv_esc_vector || 'Not specified'}</span>
+                    </div>
+                    {w.tags && w.tags.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 pt-1">
+                        {(Array.isArray(w.tags) ? w.tags : []).map((t: string) => (
+                          <span key={t} className="text-[10px] text-gray-400 bg-[#050708] px-2 py-0.5 rounded border border-[#1b2631]">
+                            #{t}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => setEditingWriteup({
+                      ...w,
+                      tags: Array.isArray(w.tags) ? w.tags.join(', ') : (w.tags || ''),
+                    })}
+                    className="px-3 py-1.5 bg-[#00ff66]/10 hover:bg-[#00ff66]/20 border border-[#00ff66]/30 text-[#00ff66] text-xs font-mono rounded-lg flex items-center gap-1 transition-all"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" /> Edit
+                  </button>
                   {!w.is_pro_lab && (
                     <button
                       onClick={() => handleToggleRetirement(w.id, w.is_retired, w.title)}
@@ -1248,6 +1333,11 @@ export default function AdminPage() {
                                 isProLab: false,
                                 platform: 'HTB',
                                 difficulty: defaultDiff,
+                                os: 'Linux',
+                                tags: p.category ? `${p.category}, CTF` : 'CTF',
+                                summary: `${p.title} walkthrough and machine exploitation report.`,
+                                initialAccessVector: '',
+                                privEscVector: '',
                                 unlockPassword: handleGeneratePassword(p.title, false),
                               });
                             }}
@@ -1288,7 +1378,7 @@ export default function AdminPage() {
         {/* ========================================================================= */}
         {selectedNotionPage && (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="w-full max-w-xl bg-[#0a0f14] border border-[#00ff66]/40 rounded-2xl p-6 shadow-2xl space-y-5">
+            <div className="w-full max-w-xl max-h-[90vh] overflow-y-auto bg-[#0a0f14] border border-[#00ff66]/40 rounded-2xl p-6 shadow-2xl space-y-5">
               <div className="flex items-center justify-between border-b border-[#1b2631] pb-3">
                 <div className="flex items-center gap-2.5">
                   <Download className="w-5 h-5 text-[#00ff66]" />
@@ -1341,7 +1431,7 @@ export default function AdminPage() {
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
                     <label className="block text-xs font-mono text-gray-400 uppercase mb-1">Platform</label>
                     <select
@@ -1370,6 +1460,76 @@ export default function AdminPage() {
                       <option value="Insane">Insane</option>
                     </select>
                   </div>
+
+                  <div>
+                    <label className="block text-xs font-mono text-gray-400 uppercase mb-1">OS / Architecture</label>
+                    <select
+                      value={importConfig.os}
+                      onChange={(e) => setImportConfig({ ...importConfig, os: e.target.value })}
+                      className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-2 text-sm font-mono text-white focus:border-[#00ff66] focus:outline-none"
+                    >
+                      <option value="Linux">Linux</option>
+                      <option value="Windows">Windows</option>
+                      <option value="Active Directory">Active Directory</option>
+                      <option value="Multi">Multi-Tier Network</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* FOOTHOLD VECTOR */}
+                <div>
+                  <label className="block text-xs font-mono text-[#00ff66] font-bold uppercase mb-1">
+                    Foothold / Initial Access Vector
+                  </label>
+                  <input
+                    type="text"
+                    value={importConfig.initialAccessVector}
+                    onChange={(e) => setImportConfig({ ...importConfig, initialAccessVector: e.target.value })}
+                    placeholder="e.g. Guest access on SMB share revealing svc_apache credentials"
+                    className="w-full bg-[#050708] border border-[#1b2631] focus:border-[#00ff66] rounded-lg px-3 py-2 text-sm font-mono text-white focus:outline-none"
+                  />
+                  <p className="text-[10px] font-mono text-gray-500 mt-0.5">Appears directly on the writeup card under FOOTHOLD.</p>
+                </div>
+
+                {/* PRIVESC VECTOR */}
+                <div>
+                  <label className="block text-xs font-mono text-amber-400 font-bold uppercase mb-1">
+                    Privilege Escalation Vector
+                  </label>
+                  <input
+                    type="text"
+                    value={importConfig.privEscVector}
+                    onChange={(e) => setImportConfig({ ...importConfig, privEscVector: e.target.value })}
+                    placeholder="e.g. SeBackupPrivilege abuse leading to SAM/SYSTEM hive dump"
+                    className="w-full bg-[#050708] border border-[#1b2631] focus:border-amber-400 rounded-lg px-3 py-2 text-sm font-mono text-white focus:outline-none"
+                  />
+                  <p className="text-[10px] font-mono text-gray-500 mt-0.5">Appears directly on the writeup card under PRIVESC.</p>
+                </div>
+
+                {/* TAGS */}
+                <div>
+                  <label className="block text-xs font-mono text-gray-400 uppercase mb-1">
+                    Tags (Comma-separated)
+                  </label>
+                  <input
+                    type="text"
+                    value={importConfig.tags}
+                    onChange={(e) => setImportConfig({ ...importConfig, tags: e.target.value })}
+                    placeholder="e.g. Pivoting, Active Directory, Kerberoasting, BloodHound"
+                    className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-2 text-sm font-mono text-white focus:border-[#00ff66] focus:outline-none"
+                  />
+                </div>
+
+                {/* SUMMARY */}
+                <div>
+                  <label className="block text-xs font-mono text-gray-400 uppercase mb-1">Summary</label>
+                  <textarea
+                    rows={2}
+                    value={importConfig.summary}
+                    onChange={(e) => setImportConfig({ ...importConfig, summary: e.target.value })}
+                    placeholder="Brief overview of the machine"
+                    className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-2 text-sm font-mono text-white focus:border-[#00ff66] focus:outline-none"
+                  />
                 </div>
 
                 <div>
@@ -1415,6 +1575,204 @@ export default function AdminPage() {
                   IMPORT &amp; REHOST SCREENSHOTS
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* MODAL: EDIT EXISTING WRITEUP                                              */}
+        {/* ========================================================================= */}
+        {editingWriteup && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-[#0a0f14] border border-[#00ff66]/40 rounded-2xl p-6 shadow-2xl space-y-5">
+              <div className="flex items-center justify-between border-b border-[#1b2631] pb-3">
+                <div className="flex items-center gap-2.5">
+                  <Edit3 className="w-5 h-5 text-[#00ff66]" />
+                  <h3 className="font-mono text-base font-bold text-white">
+                    EDIT WRITEUP: {editingWriteup.title}
+                  </h3>
+                </div>
+                <button 
+                  onClick={() => setEditingWriteup(null)}
+                  className="text-gray-500 hover:text-white text-xs font-mono font-bold"
+                >
+                  ✕ CLOSE
+                </button>
+              </div>
+
+              <form onSubmit={handleUpdateWriteup} className="space-y-4">
+                {/* Pro Lab Toggle */}
+                <div className="p-3.5 rounded-lg bg-purple-500/10 border border-purple-500/30 flex items-center justify-between">
+                  <div>
+                    <span className="font-mono text-xs font-bold text-purple-300 block">
+                      HTB PRO LAB
+                    </span>
+                    <span className="text-[11px] font-mono text-gray-400">
+                      Pro Labs are locked by default and require custom passphrase.
+                    </span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={Boolean(editingWriteup.is_pro_lab)}
+                    onChange={(e) => setEditingWriteup({ ...editingWriteup, is_pro_lab: e.target.checked })}
+                    className="w-5 h-5 accent-purple-500 rounded cursor-pointer"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-mono text-gray-400 uppercase mb-1">Title</label>
+                    <input
+                      type="text"
+                      value={editingWriteup.title || ''}
+                      onChange={(e) => setEditingWriteup({ ...editingWriteup, title: e.target.value })}
+                      className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-2 text-sm font-mono text-white focus:border-[#00ff66] focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-mono text-gray-400 uppercase mb-1">Platform</label>
+                    <select
+                      value={editingWriteup.platform || 'HTB'}
+                      onChange={(e) => setEditingWriteup({ ...editingWriteup, platform: e.target.value })}
+                      className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-2 text-sm font-mono text-white focus:border-[#00ff66] focus:outline-none"
+                    >
+                      <option value="HTB">Hack The Box</option>
+                      <option value="HTB Pro Lab">HTB Pro Lab</option>
+                      <option value="THM">TryHackMe</option>
+                      <option value="Proving Grounds">Proving Grounds</option>
+                      <option value="Other">Other CTF</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-mono text-gray-400 uppercase mb-1">Difficulty</label>
+                    <select
+                      value={editingWriteup.difficulty || 'Medium'}
+                      onChange={(e) => setEditingWriteup({ ...editingWriteup, difficulty: e.target.value })}
+                      className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-2 text-sm font-mono text-white focus:border-[#00ff66] focus:outline-none"
+                    >
+                      <option value="Easy">Easy</option>
+                      <option value="Medium">Medium</option>
+                      <option value="Hard">Hard</option>
+                      <option value="Insane">Insane</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-mono text-gray-400 uppercase mb-1">OS / Architecture</label>
+                    <select
+                      value={editingWriteup.os || 'Linux'}
+                      onChange={(e) => setEditingWriteup({ ...editingWriteup, os: e.target.value })}
+                      className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-2 text-sm font-mono text-white focus:border-[#00ff66] focus:outline-none"
+                    >
+                      <option value="Linux">Linux</option>
+                      <option value="Windows">Windows</option>
+                      <option value="Active Directory">Active Directory</option>
+                      <option value="Multi">Multi-Tier Network</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* FOOTHOLD VECTOR */}
+                <div>
+                  <label className="block text-xs font-mono text-[#00ff66] font-bold uppercase mb-1">
+                    Foothold / Initial Access Vector *
+                  </label>
+                  <input
+                    type="text"
+                    value={editingWriteup.initial_access_vector || ''}
+                    onChange={(e) => setEditingWriteup({ ...editingWriteup, initial_access_vector: e.target.value })}
+                    placeholder="e.g. Anonymous SMB share access revealing svc credentials"
+                    className="w-full bg-[#050708] border border-[#1b2631] focus:border-[#00ff66] rounded-lg px-3 py-2 text-sm font-mono text-white focus:outline-none"
+                  />
+                  <p className="text-[10px] font-mono text-gray-500 mt-0.5">Displayed prominently on the writeup card under FOOTHOLD.</p>
+                </div>
+
+                {/* PRIVESC VECTOR */}
+                <div>
+                  <label className="block text-xs font-mono text-amber-400 font-bold uppercase mb-1">
+                    Privilege Escalation Vector *
+                  </label>
+                  <input
+                    type="text"
+                    value={editingWriteup.priv_esc_vector || ''}
+                    onChange={(e) => setEditingWriteup({ ...editingWriteup, priv_esc_vector: e.target.value })}
+                    placeholder="e.g. SeBackupPrivilege abuse leading to SYSTEM hash dump"
+                    className="w-full bg-[#050708] border border-[#1b2631] focus:border-amber-400 rounded-lg px-3 py-2 text-sm font-mono text-white focus:outline-none"
+                  />
+                  <p className="text-[10px] font-mono text-gray-500 mt-0.5">Displayed prominently on the writeup card under PRIVESC.</p>
+                </div>
+
+                {/* TAGS */}
+                <div>
+                  <label className="block text-xs font-mono text-gray-400 uppercase mb-1">
+                    Tags (Comma-separated)
+                  </label>
+                  <input
+                    type="text"
+                    value={editingWriteup.tags || ''}
+                    onChange={(e) => setEditingWriteup({ ...editingWriteup, tags: e.target.value })}
+                    placeholder="e.g. Pivoting, Active Directory, Kerberoasting, BloodHound"
+                    className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-2 text-sm font-mono text-white focus:border-[#00ff66] focus:outline-none"
+                  />
+                  <p className="text-[10px] font-mono text-gray-500 mt-0.5">Rendered as badge tags (e.g. #Pivoting, #ActiveDirectory).</p>
+                </div>
+
+                {/* SUMMARY */}
+                <div>
+                  <label className="block text-xs font-mono text-gray-400 uppercase mb-1">Summary</label>
+                  <textarea
+                    rows={2}
+                    value={editingWriteup.summary || ''}
+                    onChange={(e) => setEditingWriteup({ ...editingWriteup, summary: e.target.value })}
+                    className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-2 text-sm font-mono text-white focus:border-[#00ff66] focus:outline-none"
+                  />
+                </div>
+
+                {/* UNLOCK PASSWORD */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-mono text-[#00ff66] uppercase font-bold">
+                      Unlock Passphrase
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setEditingWriteup({ ...editingWriteup, unlock_password: handleGeneratePassword(editingWriteup.title, editingWriteup.is_pro_lab) })}
+                      className="text-[11px] font-mono text-[#00ff66] hover:underline"
+                    >
+                      Generate Flag
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    value={editingWriteup.unlock_password || ''}
+                    onChange={(e) => setEditingWriteup({ ...editingWriteup, unlock_password: e.target.value })}
+                    placeholder="Leave empty or set flag password"
+                    className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-2 text-sm font-mono text-[#00ff66] focus:border-[#00ff66] focus:outline-none"
+                  />
+                </div>
+
+                <div className="pt-3 border-t border-[#1b2631] flex items-center justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setEditingWriteup(null)}
+                    className="px-4 py-2 bg-[#0e141a] border border-[#1b2631] text-xs font-mono rounded-lg text-gray-400 hover:text-white"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="px-5 py-2 bg-[#00ff66] text-[#050708] font-mono font-bold text-xs rounded-lg hover:bg-[#00ff66]/90 transition-all flex items-center gap-2"
+                  >
+                    {loading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                    SAVE CHANGES
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         )}

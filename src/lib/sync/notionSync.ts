@@ -555,9 +555,11 @@ export async function importSingleNotionPage(
     platform?: string;
     difficulty?: string;
     os?: string;
-    tags?: string[];
+    tags?: string[] | string;
     unlockPassword?: string;
     summary?: string;
+    initialAccessVector?: string;
+    privEscVector?: string;
   } = {}
 ) {
   const token = getNotionToken();
@@ -602,8 +604,29 @@ export async function importSingleNotionPage(
 
   const difficulty = overrides.difficulty || props.Difficulty?.select?.name || (isProLab ? 'Hard' : inferredDifficulty);
   const os = overrides.os || props.OS?.select?.name || (isProLab ? 'Active Directory' : 'Linux');
-  const tags = overrides.tags || props.Tags?.multi_select?.map((t: any) => t.name) || [isProLab ? 'Pro Lab' : 'CTF'];
+  
+  // Resolve tags
+  const rawTags = overrides.tags || props.Tags?.multi_select?.map((t: any) => t.name) || [isProLab ? 'Pro Lab' : 'CTF'];
+  const tags: string[] = Array.isArray(rawTags)
+    ? rawTags
+    : typeof rawTags === 'string'
+    ? rawTags.split(',').map((t: string) => t.trim().replace(/^#/, '')).filter(Boolean)
+    : ['CTF'];
+
   const summary = overrides.summary || getPlainText(props.Summary?.rich_text) || `${title} enterprise walkthrough.`;
+
+  // Resolve vectors (Foothold & PrivEsc)
+  const initialAccessVector =
+    overrides.initialAccessVector?.trim() ||
+    getPlainText(props['Initial Access']?.rich_text) ||
+    getPlainText(props.Foothold?.rich_text) ||
+    (isProLab ? 'Enterprise network entry vector' : 'Initial reconnaissance and foothold.');
+
+  const privEscVector =
+    overrides.privEscVector?.trim() ||
+    getPlainText(props['Privilege Escalation']?.rich_text) ||
+    getPlainText(props.Privesc?.rich_text) ||
+    (isProLab ? 'Domain persistence & forest privilege escalation' : 'Internal privilege escalation to root/administrator.');
 
   const slug = (overrides.slug || `${platform.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`)
     .replace(/(^-|-$)/g, '');
@@ -631,8 +654,8 @@ export async function importSingleNotionPage(
       os,
       datePublished: page.created_time?.split('T')[0] || new Date().toISOString().split('T')[0],
       summary,
-      initialAccessVector: 'See full exploitation chain in lab report.',
-      privEscVector: 'Domain compromise / Enterprise forest persistence.',
+      initialAccessVector,
+      privEscVector,
       content: fullMarkdown,
     });
   } catch (pdfErr) {
@@ -658,8 +681,8 @@ export async function importSingleNotionPage(
     is_pro_lab: isProLab,
     points: isProLab ? 100 : 30,
     summary,
-    initial_access_vector: isProLab ? 'Enterprise network entry vector' : 'Reconnaissance & initial foothold',
-    priv_esc_vector: isProLab ? 'Domain persistence & forest privilege escalation' : 'Root / System privilege escalation',
+    initial_access_vector: initialAccessVector,
+    priv_esc_vector: privEscVector,
     preview_content: previewContent,
     full_content: fullMarkdown,
     password_hash: passwordHash,

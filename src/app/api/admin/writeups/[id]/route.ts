@@ -27,7 +27,16 @@ export async function PATCH(
     if (body.tags !== undefined) {
       updates.tags = Array.isArray(body.tags)
         ? body.tags
-        : body.tags.split(',').map((t: string) => t.trim()).filter(Boolean);
+        : body.tags.split(',').map((t: string) => t.trim().replace(/^#/, '')).filter(Boolean);
+    }
+    if (body.initialAccessVector !== undefined || body.initial_access_vector !== undefined) {
+      updates.initial_access_vector = body.initialAccessVector ?? body.initial_access_vector;
+    }
+    if (body.privEscVector !== undefined || body.priv_esc_vector !== undefined) {
+      updates.priv_esc_vector = body.privEscVector ?? body.priv_esc_vector;
+    }
+    if (body.isProLab !== undefined || body.is_pro_lab !== undefined) {
+      updates.is_pro_lab = Boolean(body.isProLab ?? body.is_pro_lab);
     }
     if (body.isRetired !== undefined) updates.is_retired = Boolean(body.isRetired);
     if (body.retirementDate !== undefined) updates.retirement_date = body.retirementDate;
