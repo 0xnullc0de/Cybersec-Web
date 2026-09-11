@@ -432,9 +432,44 @@ export async function syncNotionToWriteups(): Promise<SyncStats> {
           updated_at: new Date().toISOString(),
         };
 
-        const { error: upsertError } = await supabaseAdmin!
+        let existing: any = null;
+        const { data: byNotion } = await supabaseAdmin!
           .from('writeups')
-          .upsert(writeupRecord, { onConflict: 'slug' });
+          .select('id, slug, is_retired')
+          .eq('notion_page_id', page.id)
+          .maybeSingle();
+
+        if (byNotion) {
+          existing = byNotion;
+        } else {
+          const { data: bySlug } = await supabaseAdmin!
+            .from('writeups')
+            .select('id, slug, is_retired')
+            .eq('slug', slug)
+            .maybeSingle();
+          if (bySlug) existing = bySlug;
+        }
+
+        if (existing?.slug) {
+          writeupRecord.slug = existing.slug;
+        }
+        if (existing?.is_retired !== undefined) {
+          writeupRecord.is_retired = existing.is_retired;
+        }
+
+        let upsertError: any = null;
+        if (existing?.id) {
+          const { error: updateErr } = await supabaseAdmin!
+            .from('writeups')
+            .update(writeupRecord)
+            .eq('id', existing.id);
+          upsertError = updateErr;
+        } else {
+          const { error: insertErr } = await supabaseAdmin!
+            .from('writeups')
+            .insert(writeupRecord);
+          upsertError = insertErr;
+        }
 
         if (upsertError) {
           stats.errors.push(`Failed to upsert ${slug}: ${upsertError.message}`);
@@ -552,6 +587,7 @@ export async function importSingleNotionPage(
     title?: string;
     slug?: string;
     isProLab?: boolean;
+    isRetired?: boolean;
     platform?: string;
     difficulty?: string;
     os?: string;
@@ -628,8 +664,30 @@ export async function importSingleNotionPage(
     getPlainText(props.Privesc?.rich_text) ||
     (isProLab ? 'Domain persistence & forest privilege escalation' : 'Internal privilege escalation to root/administrator.');
 
-  const slug = (overrides.slug || `${platform.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`)
+  const candidateSlug = (overrides.slug || `${platform.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`)
     .replace(/(^-|-$)/g, '');
+
+  // Check for existing writeup by notion_page_id or candidateSlug
+  let existing: any = null;
+  const { data: byNotion } = await supabaseAdmin!
+    .from('writeups')
+    .select('*')
+    .eq('notion_page_id', pageId)
+    .maybeSingle();
+
+  if (byNotion) {
+    existing = byNotion;
+  } else {
+    const { data: bySlug } = await supabaseAdmin!
+      .from('writeups')
+      .select('*')
+      .eq('slug', candidateSlug)
+      .maybeSingle();
+    if (bySlug) existing = bySlug;
+  }
+
+  // Preserve existing slug so database relations and URLs remain stable
+  const slug = overrides.slug ? overrides.slug.trim().replace(/(^-|-$)/g, '') : (existing?.slug || candidateSlug);
 
   // Parse blocks and re-host images
   const rehostedImages: string[] = [];
@@ -662,11 +720,23 @@ export async function importSingleNotionPage(
     console.warn(`PDF generation skipped for ${slug}:`, pdfErr);
   }
 
+  // Preserve retirement status unless explicitly provided in overrides
+  const isRetired = overrides.isRetired !== undefined
+    ? Boolean(overrides.isRetired)
+    : (existing ? Boolean(existing.is_retired) : !isProLab);
+
   // Password setup: for Pro Labs or locked writeups
-  const unlockPassword = overrides.unlockPassword?.trim() || (isProLab ? `HTB{${title.replace(/[^a-zA-Z0-9]/g, '')}_ProLab_Enterprise_Pwned!}` : '');
-  let passwordHash: string | null = null;
+  const unlockPassword = overrides.unlockPassword !== undefined
+    ? overrides.unlockPassword.trim()
+    : (existing?.unlock_password || (isProLab ? `HTB{${title.replace(/[^a-zA-Z0-9]/g, '')}_ProLab_Enterprise_Pwned!}` : ''));
+
+  let passwordHash = existing?.password_hash || null;
   if (unlockPassword) {
-    passwordHash = await bcrypt.hash(unlockPassword, 10);
+    if (overrides.unlockPassword || !passwordHash) {
+      passwordHash = await bcrypt.hash(unlockPassword, 10);
+    }
+  } else {
+    passwordHash = null;
   }
 
   const writeupRecord = {
@@ -677,7 +747,7 @@ export async function importSingleNotionPage(
     os,
     tags,
     date_published: page.created_time?.split('T')[0] || new Date().toISOString().split('T')[0],
-    is_retired: !isProLab, // Pro labs are NEVER retired by default
+    is_retired: isRetired,
     is_pro_lab: isProLab,
     points: isProLab ? 100 : 30,
     summary,
@@ -694,11 +764,27 @@ export async function importSingleNotionPage(
     updated_at: new Date().toISOString(),
   };
 
-  const { data, error } = await supabaseAdmin!
-    .from('writeups')
-    .upsert(writeupRecord, { onConflict: 'slug' })
-    .select()
-    .single();
+  let data: any = null;
+  let error: any = null;
+
+  if (existing?.id) {
+    const res = await supabaseAdmin!
+      .from('writeups')
+      .update(writeupRecord)
+      .eq('id', existing.id)
+      .select()
+      .single();
+    data = res.data;
+    error = res.error;
+  } else {
+    const res = await supabaseAdmin!
+      .from('writeups')
+      .insert(writeupRecord)
+      .select()
+      .single();
+    data = res.data;
+    error = res.error;
+  }
 
   if (error) {
     throw new Error(`Failed to save to Supabase: ${error.message}`);

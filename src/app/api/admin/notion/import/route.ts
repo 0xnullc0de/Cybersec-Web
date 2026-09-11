@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { revalidatePath } from 'next/cache';
 import { importSingleNotionPage } from '@/lib/sync/notionSync';
 
 export async function POST(request: Request) {
@@ -17,6 +18,12 @@ export async function POST(request: Request) {
     }
 
     const result = await importSingleNotionPage(pageId, overrides || {});
+
+    if (result.writeup?.slug) {
+      try { revalidatePath(`/writeups/${result.writeup.slug}`); } catch (_) {}
+    }
+    try { revalidatePath('/writeups'); } catch (_) {}
+    try { revalidatePath('/'); } catch (_) {}
 
     return NextResponse.json(result);
   } catch (err: any) {
