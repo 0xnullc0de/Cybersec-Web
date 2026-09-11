@@ -250,32 +250,50 @@ async function parseNotionBlocksToMarkdown(
 export function extractReconPreview(fullMarkdown: string): string {
   if (!fullMarkdown || typeof fullMarkdown !== 'string') return '';
 
+  // 1. Explicit standalone divider marker
   const standaloneDividerMatch = fullMarkdown.match(/\r?\n\s*---\s*\r?\n/);
-  const postReconHeadingRegex = /\r?\n##\s+(?:[2-9]\.|\d+\.\s*(?:Exploitation|Foothold|Initial|Recon|Web)|Web|Airlines|HTTP|Port\s+\d+|Ffuf|Directory|Foothold|Initial Access|Exploitation|Vulnerability|Gaining Access|Privilege Escalation|PrivEsc)/i;
+  
+  // 2. Headings that indicate moving beyond initial port scanning/recon
+  const postReconHeadingRegex = /\r?\n##\s+(?:[2-9]\.|\d+\.\s*|[^\n]*(?:Web|Airlines|HTTP|Port\s+\d+|Ffuf|Directory|Foothold|Initial|Exploit|Vulnerabilit|Gaining|Privilege|PrivEsc|Blood[Hh]ound|Lateral|Pivot|AS-REP|Kerberoast|AD\s*CS|SMB|User\s+Enum|David|Emily|Shell|Root|User|Admin))/i;
   const postReconMatch = fullMarkdown.match(postReconHeadingRegex);
 
+  // 3. Find Nmap / Port scan block
+  const nmapRegex = /(?:nmap|rustscan|masscan|PORT\s+STATE\s+SERVICE)/i;
+  const nmapMatch = fullMarkdown.match(nmapRegex);
+
   let cutIndex = -1;
+
   if (standaloneDividerMatch && standaloneDividerMatch.index !== undefined) {
     cutIndex = standaloneDividerMatch.index;
-  } else if (postReconMatch && postReconMatch.index !== undefined) {
-    cutIndex = postReconMatch.index;
-  } else {
-    // Fallback: look for nmap scan block
-    const nmapIdx = fullMarkdown.toLowerCase().indexOf('nmap');
-    if (nmapIdx !== -1) {
-      const nextCodeClose = fullMarkdown.indexOf('```', nmapIdx + 10);
-      if (nextCodeClose !== -1) {
-        const afterNmap = fullMarkdown.indexOf('\n## ', nextCodeClose + 3);
-        if (afterNmap !== -1) {
-          cutIndex = afterNmap;
-        } else {
-          const endOfNotes = fullMarkdown.indexOf('\n\n\n', nextCodeClose + 100);
-          if (endOfNotes !== -1 && endOfNotes < nextCodeClose + 1000) {
-            cutIndex = endOfNotes;
-          } else {
-            cutIndex = nextCodeClose + 3;
-          }
-        }
+  }
+
+  if (postReconMatch && postReconMatch.index !== undefined) {
+    if (cutIndex === -1 || postReconMatch.index < cutIndex) {
+      cutIndex = postReconMatch.index;
+    }
+  }
+
+  // After the Nmap block closes, determine how far initial recon / host config goes
+  if (nmapMatch && nmapMatch.index !== undefined) {
+    const nmapClose = fullMarkdown.indexOf('```', nmapMatch.index + 10);
+    if (nmapClose !== -1) {
+      const endOfNmapBlock = nmapClose + 3;
+      const nextHeadingAfterNmap = fullMarkdown.indexOf('\n## ', endOfNmapBlock);
+      
+      // Stop before secondary tooling/enumeration (SMB enumeration, Bloodhound, user dumping, etc.)
+      const smbOrToolMatch = fullMarkdown.slice(endOfNmapBlock).search(/\r?\n(?:SMB\s+Enumeration|###\s+|```[a-z0-9_:-]*\r?\n(?:sudo\s+ntpdate|nxc\s+|crackmapexec|bloodhound|rusthound|cme\s+|enum4linux|smbclient|gobuster|feroxbuster|wpscan|nikto))/i);
+      
+      let nmapCutCandidate = -1;
+      if (smbOrToolMatch !== -1) {
+        nmapCutCandidate = endOfNmapBlock + smbOrToolMatch;
+      } else if (nextHeadingAfterNmap !== -1) {
+        nmapCutCandidate = nextHeadingAfterNmap;
+      } else {
+        nmapCutCandidate = Math.min(fullMarkdown.length, endOfNmapBlock + 1200);
+      }
+
+      if (cutIndex === -1 || (nmapCutCandidate > 0 && nmapCutCandidate < cutIndex)) {
+        cutIndex = nmapCutCandidate;
       }
     }
   }
