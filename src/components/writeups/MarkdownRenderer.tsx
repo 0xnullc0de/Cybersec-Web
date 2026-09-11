@@ -16,8 +16,15 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
     setTimeout(() => setCopiedIndex(null), 2000);
   };
 
+  // Ensure any dangling/unclosed code fences are automatically closed
+  let sanitizedContent = content || '';
+  const backtickCount = (sanitizedContent.match(/```/g) || []).length;
+  if (backtickCount % 2 !== 0) {
+    sanitizedContent += '\n```';
+  }
+
   // Split by fenced code blocks to preserve them accurately
-  const parts = content.split(/(```[\s\S]*?```)/g);
+  const parts = sanitizedContent.split(/(```[\s\S]*?```)/g);
   let codeBlockCounter = 0;
 
   return (
@@ -29,12 +36,33 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
         if (part.startsWith('```')) {
           codeBlockCounter++;
           const blockId = codeBlockCounter;
-          // Match language with optional :command tag (e.g. ```bash:command or ```bash)
-          const match = part.match(/^```([a-zA-Z0-9_:-]*)\n([\s\S]*?)```$/);
-          const fullLang = match ? match[1] || 'bash' : 'bash';
+          // Match language with optional :command tag (e.g. ```bash:command, ```javascript, etc.)
+          const match = part.match(/^```([a-zA-Z0-9_:-]*)[ \t]*\r?\n([\s\S]*?)```$/);
+          let fullLang = 'bash';
+          let rawCode = '';
+
+          if (match) {
+            fullLang = match[1] || 'bash';
+            rawCode = match[2];
+          } else {
+            // Fallback for non-standard line endings or formatting
+            const inner = part.slice(3, -3);
+            const firstNewline = inner.search(/\r?\n/);
+            if (firstNewline !== -1) {
+              const firstLine = inner.slice(0, firstNewline).trim();
+              if (/^[a-zA-Z0-9_:-]+$/.test(firstLine)) {
+                fullLang = firstLine;
+                rawCode = inner.slice(firstNewline + 1).replace(/^\r?\n/, '');
+              } else {
+                rawCode = inner;
+              }
+            } else {
+              rawCode = inner;
+            }
+          }
+
           const isExplicitCommand = fullLang.includes(':command') || fullLang.includes(':terminal');
           const lang = fullLang.split(':')[0] || 'bash';
-          const rawCode = match ? match[2] : part.slice(3, -3);
 
           return (
             <div

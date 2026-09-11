@@ -240,6 +240,58 @@ async function parseNotionBlocksToMarkdown(
 }
 
 /**
+ * Extracts a concise reconnaissance/nmap preview for locked or active writeups.
+ * Cuts at:
+ * 1. A standalone markdown divider (---)
+ * 2. The first post-recon section heading (e.g. ## Web, ## Port 80, ## Initial Access, etc.)
+ * 3. Or right after the initial nmap scan block + brief notes.
+ * Also guarantees that any unclosed code fence (```) is properly closed.
+ */
+export function extractReconPreview(fullMarkdown: string): string {
+  if (!fullMarkdown || typeof fullMarkdown !== 'string') return '';
+
+  const standaloneDividerMatch = fullMarkdown.match(/\r?\n\s*---\s*\r?\n/);
+  const postReconHeadingRegex = /\r?\n##\s+(?:[2-9]\.|\d+\.\s*(?:Exploitation|Foothold|Initial|Recon|Web)|Web|Airlines|HTTP|Port\s+\d+|Ffuf|Directory|Foothold|Initial Access|Exploitation|Vulnerability|Gaining Access|Privilege Escalation|PrivEsc)/i;
+  const postReconMatch = fullMarkdown.match(postReconHeadingRegex);
+
+  let cutIndex = -1;
+  if (standaloneDividerMatch && standaloneDividerMatch.index !== undefined) {
+    cutIndex = standaloneDividerMatch.index;
+  } else if (postReconMatch && postReconMatch.index !== undefined) {
+    cutIndex = postReconMatch.index;
+  } else {
+    // Fallback: look for nmap scan block
+    const nmapIdx = fullMarkdown.toLowerCase().indexOf('nmap');
+    if (nmapIdx !== -1) {
+      const nextCodeClose = fullMarkdown.indexOf('```', nmapIdx + 10);
+      if (nextCodeClose !== -1) {
+        const afterNmap = fullMarkdown.indexOf('\n## ', nextCodeClose + 3);
+        if (afterNmap !== -1) {
+          cutIndex = afterNmap;
+        } else {
+          const endOfNotes = fullMarkdown.indexOf('\n\n\n', nextCodeClose + 100);
+          if (endOfNotes !== -1 && endOfNotes < nextCodeClose + 1000) {
+            cutIndex = endOfNotes;
+          } else {
+            cutIndex = nextCodeClose + 3;
+          }
+        }
+      }
+    }
+  }
+
+  let preview = cutIndex > 0 ? fullMarkdown.slice(0, cutIndex).trim() : fullMarkdown;
+
+  // Ensure code blocks are properly balanced
+  const codeBlockCount = (preview.match(/```/g) || []).length;
+  if (codeBlockCount % 2 !== 0) {
+    preview += '\n```';
+  }
+
+  return preview;
+}
+
+/**
  * Main Notion-to-Supabase synchronization runner.
  * Single action that pulls new or updated writeup pages from Notion,
  * re-hosts images into Supabase Storage, generates matching dark-mode PDFs,
@@ -377,13 +429,8 @@ export async function syncNotionToWriteups(): Promise<SyncStats> {
 
         stats.imagesRehosted += rehostedImages.length;
 
-        // Split preview content (e.g. section 1 / recon before '---')
-        let previewContent = fullMarkdown;
-        if (fullMarkdown.includes('---')) {
-          previewContent = fullMarkdown.split('---')[0].trim();
-        } else if (fullMarkdown.includes('## 2.')) {
-          previewContent = fullMarkdown.split('## 2.')[0].trim();
-        }
+        // Split preview content (strictly recon / nmap for locked writeups)
+        const previewContent = extractReconPreview(fullMarkdown);
 
         // Generate Dark-Mode PDF and store in Supabase Storage
         let pdfPath: string | null = null;
@@ -693,13 +740,8 @@ export async function importSingleNotionPage(
   const rehostedImages: string[] = [];
   const fullMarkdown = await parseNotionBlocksToMarkdown(notion, pageId, slug, rehostedImages);
 
-  // Split preview content
-  let previewContent = fullMarkdown;
-  if (fullMarkdown.includes('---')) {
-    previewContent = fullMarkdown.split('---')[0].trim();
-  } else if (fullMarkdown.includes('## 2.')) {
-    previewContent = fullMarkdown.split('## 2.')[0].trim();
-  }
+  // Split preview content (strictly recon / nmap for locked writeups)
+  const previewContent = extractReconPreview(fullMarkdown);
 
   // Generate dark-mode PDF
   let pdfPath: string | null = null;
