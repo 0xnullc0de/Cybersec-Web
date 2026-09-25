@@ -41,6 +41,13 @@ export default async function WriteupDetailPage({ params }: WriteupPageProps) {
 
   const retiredNow = isWriteupRetired(writeup);
 
+  // For active machines, strip out Introduction and pre-recon spoilers from previewContent
+  const activeSafePreview = !retiredNow && writeup.previewContent
+    ? writeup.previewContent
+        .replace(/(?:^|\n)#{1,3}\s+Introduction[\s\S]*?(?=(?:\n#{1,3}\s+[^\n]+|\n---|$))/i, '')
+        .trim()
+    : (writeup.previewContent || '');
+
   return (
     <article className="pt-24 pb-20 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
       {/* Back to writeups link */}
@@ -175,11 +182,11 @@ export default async function WriteupDetailPage({ params }: WriteupPageProps) {
         ) : (
           /* ACTIVE MACHINE: Initial Recon Preview + Server-Gated RetirementGate */
           <div className="space-y-8">
-            <MarkdownRenderer content={writeup.previewContent || ''} />
+            <MarkdownRenderer content={activeSafePreview} />
 
             <RetirementGate
               slug={writeup.slug}
-              previewContent={writeup.previewContent || ''}
+              previewContent={activeSafePreview}
               machineTitle={writeup.title}
               retirementDate={writeup.retirementDate}
               platform={writeup.platform}

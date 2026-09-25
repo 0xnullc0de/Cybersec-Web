@@ -250,16 +250,19 @@ async function parseNotionBlocksToMarkdown(
 export function extractReconPreview(fullMarkdown: string): string {
   if (!fullMarkdown || typeof fullMarkdown !== 'string') return '';
 
+  // Remove Introduction section for preview to protect active machines
+  const cleanedMarkdown = fullMarkdown.replace(/(?:^|\n)#{1,3}\s+Introduction[\s\S]*?(?=(?:\n#{1,3}\s+[^\n]+|\n---|$))/i, '').trim();
+
   // 1. Explicit standalone divider marker
-  const standaloneDividerMatch = fullMarkdown.match(/\r?\n\s*---\s*\r?\n/);
+  const standaloneDividerMatch = cleanedMarkdown.match(/\r?\n\s*---\s*\r?\n/);
   
   // 2. Headings that indicate moving beyond initial port scanning/recon
   const postReconHeadingRegex = /\r?\n##\s+(?:[2-9]\.|\d+\.\s*|[^\n]*(?:Web|Airlines|HTTP|Port\s+\d+|Ffuf|Directory|Foothold|Initial|Exploit|Vulnerabilit|Gaining|Privilege|PrivEsc|Blood[Hh]ound|Lateral|Pivot|AS-REP|Kerberoast|AD\s*CS|SMB|User\s+Enum|David|Emily|Shell|Root|User|Admin))/i;
-  const postReconMatch = fullMarkdown.match(postReconHeadingRegex);
+  const postReconMatch = cleanedMarkdown.match(postReconHeadingRegex);
 
   // 3. Find Nmap / Port scan block
   const nmapRegex = /(?:nmap|rustscan|masscan|PORT\s+STATE\s+SERVICE)/i;
-  const nmapMatch = fullMarkdown.match(nmapRegex);
+  const nmapMatch = cleanedMarkdown.match(nmapRegex);
 
   let cutIndex = -1;
 
@@ -275,13 +278,13 @@ export function extractReconPreview(fullMarkdown: string): string {
 
   // After the Nmap block closes, determine how far initial recon / host config goes
   if (nmapMatch && nmapMatch.index !== undefined) {
-    const nmapClose = fullMarkdown.indexOf('```', nmapMatch.index + 10);
+    const nmapClose = cleanedMarkdown.indexOf('```', nmapMatch.index + 10);
     if (nmapClose !== -1) {
       const endOfNmapBlock = nmapClose + 3;
-      const nextHeadingAfterNmap = fullMarkdown.indexOf('\n## ', endOfNmapBlock);
+      const nextHeadingAfterNmap = cleanedMarkdown.indexOf('\n## ', endOfNmapBlock);
       
       // Stop before secondary tooling/enumeration (SMB enumeration, Bloodhound, user dumping, etc.)
-      const smbOrToolMatch = fullMarkdown.slice(endOfNmapBlock).search(/\r?\n(?:SMB\s+Enumeration|###\s+|```[a-z0-9_:-]*\r?\n(?:sudo\s+ntpdate|nxc\s+|crackmapexec|bloodhound|rusthound|cme\s+|enum4linux|smbclient|gobuster|feroxbuster|wpscan|nikto))/i);
+      const smbOrToolMatch = cleanedMarkdown.slice(endOfNmapBlock).search(/\r?\n(?:SMB\s+Enumeration|###\s+|```[a-z0-9_:-]*\r?\n(?:sudo\s+ntpdate|nxc\s+|crackmapexec|bloodhound|rusthound|cme\s+|enum4linux|smbclient|gobuster|feroxbuster|wpscan|nikto))/i);
       
       let nmapCutCandidate = -1;
       if (smbOrToolMatch !== -1) {
@@ -289,7 +292,7 @@ export function extractReconPreview(fullMarkdown: string): string {
       } else if (nextHeadingAfterNmap !== -1) {
         nmapCutCandidate = nextHeadingAfterNmap;
       } else {
-        nmapCutCandidate = Math.min(fullMarkdown.length, endOfNmapBlock + 1200);
+        nmapCutCandidate = Math.min(cleanedMarkdown.length, endOfNmapBlock + 1200);
       }
 
       if (cutIndex === -1 || (nmapCutCandidate > 0 && nmapCutCandidate < cutIndex)) {
@@ -298,7 +301,7 @@ export function extractReconPreview(fullMarkdown: string): string {
     }
   }
 
-  let preview = cutIndex > 0 ? fullMarkdown.slice(0, cutIndex).trim() : fullMarkdown;
+  let preview = cutIndex > 0 ? cleanedMarkdown.slice(0, cutIndex).trim() : cleanedMarkdown;
 
   // Ensure code blocks are properly balanced
   const codeBlockCount = (preview.match(/```/g) || []).length;
