@@ -150,26 +150,36 @@ export default function CertCard({ cert }: CertCardProps) {
               </button>
             </div>
 
-            <div className="overflow-hidden rounded-xl bg-black border border-[#1b2631] flex items-center justify-center max-h-[75vh]">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={cert.badgeImagePath}
-                alt={cert.fullName}
-                className="w-full h-auto object-contain max-h-[75vh]"
-              />
+            <div className="overflow-hidden rounded-xl bg-black border border-[#1b2631] flex items-center justify-center min-h-[50vh] max-h-[75vh] w-full">
+              {cert.badgeImagePath.toLowerCase().endsWith('.pdf') ? (
+                <iframe
+                  src={cert.badgeImagePath}
+                  title={cert.fullName}
+                  className="w-full h-[75vh] border-0 rounded-xl"
+                />
+              ) : (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                  src={cert.badgeImagePath}
+                  alt={cert.fullName}
+                  className="w-full h-auto object-contain max-h-[75vh]"
+                />
+              )}
             </div>
 
             <div className="flex items-center justify-between text-xs font-mono text-gray-400 pt-1">
               <span>Verified Credential: <strong className="text-[#00ff66]">{cert.credentialId || cert.name}</strong></span>
-              <a
-                href={cert.badgeImagePath}
-                target="_blank"
-                rel="noreferrer"
-                className="text-[#00ff66] hover:underline flex items-center gap-1"
-              >
-                <span>OPEN FULL SIZE</span>
-                <ExternalLink className="w-3 h-3" />
-              </a>
+              <div className="flex items-center gap-3">
+                <a
+                  href={cert.badgeImagePath}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-[#00ff66] hover:underline flex items-center gap-1"
+                >
+                  <span>{cert.badgeImagePath.toLowerCase().endsWith('.pdf') ? 'OPEN ORIGINAL PDF' : 'OPEN FULL SIZE'}</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
             </div>
           </div>
         </div>

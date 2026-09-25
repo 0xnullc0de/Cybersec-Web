@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
     const { data, error } = await client.storage
       .from("writeup-images")
       .upload(filename, buffer, {
-        contentType: file.type || "image/png",
+        contentType: file.type || (ext === "pdf" ? "application/pdf" : "image/png"),
         upsert: true,
       });
 

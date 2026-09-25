@@ -1312,13 +1312,13 @@ export default function AdminPage() {
                   </div>
                   <div>
                     <div className="flex items-center justify-between mb-1">
-                      <label className="block text-xs font-mono text-gray-400 uppercase">Certificate / Badge Image</label>
+                      <label className="block text-xs font-mono text-gray-400 uppercase">Certificate / Badge (Image or PDF)</label>
                       <label className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-orange-500/10 border border-orange-500/30 rounded text-orange-400 hover:bg-orange-500/20 text-xs font-mono cursor-pointer transition-all">
                         <Upload className="w-3 h-3" />
-                        {uploadingImage ? 'Uploading...' : 'Upload Image'}
+                        {uploadingImage ? 'Uploading...' : 'Upload Image / PDF'}
                         <input
                           type="file"
-                          accept="image/*"
+                          accept="image/*,application/pdf"
                           disabled={uploadingImage}
                           className="hidden"
                           onChange={async (e) => {
@@ -2354,13 +2354,13 @@ export default function AdminPage() {
 
                   <div>
                     <div className="flex items-center justify-between mb-1">
-                      <label className="block text-xs font-mono text-gray-400 uppercase">Certificate / Badge Image</label>
+                      <label className="block text-xs font-mono text-gray-400 uppercase">Certificate / Badge (Image or PDF)</label>
                       <label className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-orange-500/10 border border-orange-500/30 rounded text-orange-400 hover:bg-orange-500/20 text-xs font-mono cursor-pointer transition-all">
                         <Upload className="w-3 h-3" />
-                        {uploadingImage ? 'Uploading...' : 'Upload Image'}
+                        {uploadingImage ? 'Uploading...' : 'Upload Image / PDF'}
                         <input
                           type="file"
-                          accept="image/*"
+                          accept="image/*,application/pdf"
                           disabled={uploadingImage}
                           className="hidden"
                           onChange={async (e) => {
