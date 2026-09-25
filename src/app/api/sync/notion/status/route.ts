@@ -3,6 +3,8 @@ import { Client } from '@notionhq/client';
 import fs from 'fs';
 import path from 'path';
 
+export const dynamic = 'force-dynamic';
+
 function getNotionToken(): string | null {
   if (process.env.NOTION_API_KEY && process.env.NOTION_API_KEY.trim()) {
     return process.env.NOTION_API_KEY.trim();
