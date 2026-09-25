@@ -18,8 +18,17 @@ export async function PATCH(
     if (body.credentialId !== undefined) updates.credential_id = body.credentialId;
     if (body.badgeColor !== undefined) updates.badge_color = body.badgeColor;
     if (body.description !== undefined) updates.description = body.description;
-    if (body.skillsCovered !== undefined) updates.skills_covered = body.skillsCovered;
+    if (body.skillsCovered !== undefined) {
+      updates.skills_covered = Array.isArray(body.skillsCovered)
+        ? body.skillsCovered
+        : typeof body.skillsCovered === 'string'
+        ? body.skillsCovered.split(',').map((s: string) => s.trim()).filter(Boolean)
+        : [];
+    }
     if (body.verificationUrl !== undefined) updates.verification_url = body.verificationUrl;
+    if (body.isProLab !== undefined) updates.is_pro_lab = Boolean(body.isProLab);
+    if (body.writeupSlug !== undefined) updates.writeup_slug = body.writeupSlug ? body.writeupSlug.trim() : null;
+    if (body.badgeImagePath !== undefined) updates.badge_image_path = body.badgeImagePath ? body.badgeImagePath.trim() : null;
     updates.updated_at = new Date().toISOString();
 
     const { data, error } = await supabase

@@ -88,33 +88,41 @@ export default async function WriteupDetailPage({ params }: WriteupPageProps) {
           <h1 className="font-mono text-3xl sm:text-4xl lg:text-5xl font-black text-white tracking-tight uppercase">
             {writeup.title} <span className="text-[#00ff66]">.HTB</span>
           </h1>
-          <p className="text-gray-400 text-sm sm:text-base font-sans leading-relaxed">
-            {writeup.summary}
-          </p>
+          {retiredNow && writeup.summary && (
+            <p className="text-gray-400 text-sm sm:text-base font-sans leading-relaxed">
+              {writeup.summary}
+            </p>
+          )}
         </div>
 
-        {/* Attack Vector Matrix */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
-          <div className="p-3.5 rounded-xl bg-[#080c0f] border border-[#18232c] font-mono text-xs">
-            <div className="text-[#00ff66] font-bold mb-1 flex items-center gap-1.5">
-              <Terminal className="w-3.5 h-3.5" />
-              <span>INITIAL FOOTHOLD VECTOR</span>
-            </div>
-            <p className="text-gray-300 font-sans text-xs sm:text-sm">
-              {writeup.initialAccessVector}
-            </p>
-          </div>
+        {/* Attack Vector Matrix - Only shown for retired machines to prevent spoiling active labs */}
+        {retiredNow && (writeup.initialAccessVector || writeup.privEscVector) && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
+            {writeup.initialAccessVector && (
+              <div className="p-3.5 rounded-xl bg-[#080c0f] border border-[#18232c] font-mono text-xs">
+                <div className="text-[#00ff66] font-bold mb-1 flex items-center gap-1.5">
+                  <Terminal className="w-3.5 h-3.5" />
+                  <span>INITIAL FOOTHOLD VECTOR</span>
+                </div>
+                <p className="text-gray-300 font-sans text-xs sm:text-sm">
+                  {writeup.initialAccessVector}
+                </p>
+              </div>
+            )}
 
-          <div className="p-3.5 rounded-xl bg-[#080c0f] border border-[#18232c] font-mono text-xs">
-            <div className="text-amber-400 font-bold mb-1 flex items-center gap-1.5">
-              <ShieldCheck className="w-3.5 h-3.5" />
-              <span>PRIVILEGE ESCALATION CHAIN</span>
-            </div>
-            <p className="text-gray-300 font-sans text-xs sm:text-sm">
-              {writeup.privEscVector}
-            </p>
+            {writeup.privEscVector && (
+              <div className="p-3.5 rounded-xl bg-[#080c0f] border border-[#18232c] font-mono text-xs">
+                <div className="text-amber-400 font-bold mb-1 flex items-center gap-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span>PRIVILEGE ESCALATION CHAIN</span>
+                </div>
+                <p className="text-gray-300 font-sans text-xs sm:text-sm">
+                  {writeup.privEscVector}
+                </p>
+              </div>
+            )}
           </div>
-        </div>
+        )}
 
         {/* Metadata Footer: Date, Target IP, Tags */}
         <div className="pt-4 border-t border-[#17222c] flex flex-wrap items-center justify-between gap-4 font-mono text-xs text-gray-400">

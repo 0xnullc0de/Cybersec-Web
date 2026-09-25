@@ -1,19 +1,38 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
-import { tilNotes } from '@/data/til';
+import React, { useState, useEffect, useMemo } from 'react';
+import { tilNotes as fallbackNotes } from '@/data/til';
+import { TilNote } from '@/types';
 import TilCard from '@/components/til/TilCard';
 import SectionHeader from '@/components/ui/SectionHeader';
-import { Search, Filter, X, Terminal, BookOpen } from 'lucide-react';
+import { Search, Filter, X, Terminal, BookOpen, RefreshCw } from 'lucide-react';
 
 export default function TilPage() {
+  const [notes, setNotes] = useState<TilNote[]>(fallbackNotes);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
+  const [loading, setLoading] = useState(false);
 
-  const categories = ['All', 'Active Directory', 'Privilege Escalation', 'Tooling'];
+  useEffect(() => {
+    setLoading(true);
+    fetch('/api/til')
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          setNotes(data);
+        }
+      })
+      .catch((err) => console.error('Failed to load notes:', err))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const categories = useMemo(() => {
+    const rawCategories = Array.from(new Set(notes.map((n) => n.category).filter(Boolean)));
+    return ['All', ...rawCategories];
+  }, [notes]);
 
   const filteredNotes = useMemo(() => {
-    return tilNotes.filter((note) => {
+    return notes.filter((note) => {
       // 1. Search Query
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
@@ -33,7 +52,7 @@ export default function TilPage() {
 
       return true;
     });
-  }, [searchQuery, selectedCategory]);
+  }, [notes, searchQuery, selectedCategory]);
 
   return (
     <div className="pt-24 pb-20 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 space-y-10">

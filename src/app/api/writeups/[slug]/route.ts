@@ -25,7 +25,13 @@ export async function GET(
       }
       // Sanitize active machine fallback content
       if (!fallback.isRetired) {
-        return NextResponse.json({ ...fallback, content: '' }, {
+        return NextResponse.json({
+          ...fallback,
+          content: '',
+          summary: '',
+          initialAccessVector: '',
+          privEscVector: '',
+        }, {
           headers: {
             'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
           },
@@ -39,7 +45,12 @@ export async function GET(
     }
 
     const mapped = mapDbToWriteup(data);
-    if (!isWriteupRetired(data)) mapped.content = '';
+    if (!isWriteupRetired(data)) {
+      mapped.content = '';
+      mapped.summary = '';
+      mapped.initialAccessVector = '';
+      mapped.privEscVector = '';
+    }
     return NextResponse.json(mapped, {
       headers: {
         'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',

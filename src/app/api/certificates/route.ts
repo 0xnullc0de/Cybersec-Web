@@ -35,6 +35,9 @@ export async function POST(request: NextRequest) {
       description = '',
       skillsCovered = [],
       verificationUrl,
+      isProLab = false,
+      writeupSlug = null,
+      badgeImagePath = null,
     } = body;
 
     if (!name || !fullName || !issuer || !date) {
@@ -64,8 +67,13 @@ export async function POST(request: NextRequest) {
       description: description.trim(),
       skills_covered: Array.isArray(skillsCovered)
         ? skillsCovered.map((s: string) => s.trim()).filter(Boolean)
+        : typeof skillsCovered === 'string'
+        ? skillsCovered.split(',').map((s: string) => s.trim()).filter(Boolean)
         : [],
       verification_url: verificationUrl ? verificationUrl.trim() : null,
+      is_pro_lab: Boolean(isProLab),
+      writeup_slug: writeupSlug ? writeupSlug.trim() : null,
+      badge_image_path: badgeImagePath ? badgeImagePath.trim() : null,
       display_order: nextOrder,
     };
 

@@ -4,27 +4,36 @@ import React, { useState, useEffect } from 'react';
 import { 
   Shield, Key, Lock, Unlock, Plus, RefreshCw, Check, Copy, 
   Trash2, ExternalLink, Terminal, AlertTriangle, FileText, 
-  Award, Eye, CheckCircle2, Server, Download, Globe, Sparkles, Folder, Edit3
+  Award, Eye, CheckCircle2, Server, Download, Globe, Sparkles, Folder, Edit3,
+  BookOpen, Image as ImageIcon, Upload, X
 } from 'lucide-react';
 import Link from 'next/link';
 
 export default function AdminPage() {
   const [adminKey, setAdminKey] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [activeTab, setActiveTab] = useState<'passwords' | 'writeups' | 'new-writeup' | 'certs' | 'notion'>('passwords');
+  const [activeTab, setActiveTab] = useState<'passwords' | 'writeups' | 'new-writeup' | 'certs' | 'notes' | 'notion'>('passwords');
   
   // Data state
   const [writeups, setWriteups] = useState<any[]>([]);
   const [certs, setCerts] = useState<any[]>([]);
+  const [notes, setNotes] = useState<any[]>([]);
   const [notionStatus, setNotionStatus] = useState<any>(null);
   const [notionPages, setNotionPages] = useState<any[]>([]);
   const [notionCategoryFilter, setNotionCategoryFilter] = useState<string>('all');
   const [loading, setLoading] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [copiedSlug, setCopiedSlug] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Edit Writeup Modal state
   const [editingWriteup, setEditingWriteup] = useState<any | null>(null);
+
+  // Edit Cert Modal state
+  const [editingCert, setEditingCert] = useState<any | null>(null);
+
+  // Edit Note Modal state
+  const [editingNote, setEditingNote] = useState<any | null>(null);
 
   // Import Modal state
   const [selectedNotionPage, setSelectedNotionPage] = useState<any | null>(null);
@@ -52,6 +61,21 @@ export default function AdminPage() {
     badgeColor: '#00ff66',
     description: '',
     skillsCovered: '',
+    isProLab: false,
+    writeupSlug: '',
+    badgeImagePath: '',
+  });
+
+  // Technique Note form state
+  const [newNote, setNewNote] = useState({
+    title: '',
+    slug: '',
+    category: 'Active Directory',
+    date: new Date().toISOString().split('T')[0],
+    tags: '',
+    readTime: '3 min read',
+    summary: '',
+    content: '',
   });
 
   // New writeup form state
@@ -122,6 +146,13 @@ export default function AdminPage() {
       if (cRes.ok) {
         const cData = await cRes.json();
         setCerts(cData || []);
+      }
+
+      // Fetch technique notes
+      const tRes = await fetch('/api/til');
+      if (tRes.ok) {
+        const tData = await tRes.json();
+        setNotes(tData || []);
       }
 
       // Fetch Notion status & discoverable pages
@@ -304,11 +335,144 @@ export default function AdminPage() {
           badgeColor: '#00ff66',
           description: '',
           skillsCovered: '',
+          isProLab: false,
+          writeupSlug: '',
+          badgeImagePath: '',
         });
         fetchData(adminKey);
       } else {
         const d = await res.json();
         setMessage({ type: 'error', text: d.error || 'Failed to save certificate' });
+      }
+    } catch (e: any) {
+      setMessage({ type: 'error', text: e.message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUploadImageFile = async (file: File, folder: string = 'notes'): Promise<string | null> => {
+    setUploadingImage(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('folder', folder);
+      const res = await fetch('/api/admin/upload-image', {
+        method: 'POST',
+        body: fd,
+      });
+      const data = await res.json();
+      if (res.ok && data.url) {
+        return data.url;
+      } else {
+        setMessage({ type: 'error', text: data.error || 'Failed to upload image' });
+        return null;
+      }
+    } catch (err: any) {
+      setMessage({ type: 'error', text: err.message });
+      return null;
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  const handleUpdateCert = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingCert) return;
+    setLoading(true);
+    setMessage(null);
+    try {
+      const res = await fetch(`/api/certificates/${editingCert.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editingCert),
+      });
+      if (res.ok) {
+        setMessage({ type: 'success', text: `Certificate "${editingCert.name}" updated successfully!` });
+        setEditingCert(null);
+        fetchData(adminKey);
+      } else {
+        const d = await res.json();
+        setMessage({ type: 'error', text: d.error || 'Failed to update certificate' });
+      }
+    } catch (e: any) {
+      setMessage({ type: 'error', text: e.message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCreateNote = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setMessage(null);
+    try {
+      const res = await fetch('/api/til', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...newNote,
+          tags: newNote.tags.split(',').map((t) => t.trim()).filter(Boolean),
+        }),
+      });
+      if (res.ok) {
+        setMessage({ type: 'success', text: `Technique note "${newNote.title}" saved successfully!` });
+        setNewNote({
+          title: '',
+          slug: '',
+          category: 'Active Directory',
+          date: new Date().toISOString().split('T')[0],
+          tags: '',
+          readTime: '3 min read',
+          summary: '',
+          content: '',
+        });
+        fetchData(adminKey);
+      } else {
+        const d = await res.json();
+        setMessage({ type: 'error', text: d.error || 'Failed to create note' });
+      }
+    } catch (e: any) {
+      setMessage({ type: 'error', text: e.message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUpdateNote = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingNote) return;
+    setLoading(true);
+    setMessage(null);
+    try {
+      const res = await fetch(`/api/til/${editingNote.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editingNote),
+      });
+      if (res.ok) {
+        setMessage({ type: 'success', text: `Note "${editingNote.title}" updated successfully!` });
+        setEditingNote(null);
+        fetchData(adminKey);
+      } else {
+        const d = await res.json();
+        setMessage({ type: 'error', text: d.error || 'Failed to update note' });
+      }
+    } catch (e: any) {
+      setMessage({ type: 'error', text: e.message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteNote = async (id: string, title: string) => {
+    if (!confirm(`Delete technique note "${title}"?`)) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/til/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setMessage({ type: 'success', text: `Deleted note "${title}"` });
+        fetchData(adminKey);
       }
     } catch (e: any) {
       setMessage({ type: 'error', text: e.message });
@@ -561,6 +725,18 @@ export default function AdminPage() {
           >
             <Award className="w-4 h-4 text-orange-400" />
             CERTIFICATIONS ({certs.length})
+          </button>
+
+          <button
+            onClick={() => setActiveTab('notes')}
+            className={`px-4 py-2.5 text-xs font-mono font-bold rounded-t-lg flex items-center gap-2 border-b-2 transition-all whitespace-nowrap ${
+              activeTab === 'notes'
+                ? 'border-[#00ff66] text-[#00ff66] bg-[#00ff66]/5'
+                : 'border-transparent text-gray-400 hover:text-white'
+            }`}
+          >
+            <BookOpen className="w-4 h-4 text-cyan-400" />
+            TECHNIQUES &amp; NOTES ({notes.length})
           </button>
 
           <button
@@ -1105,6 +1281,69 @@ export default function AdminPage() {
                   </div>
                 </div>
 
+                {/* Pro Lab Toggle */}
+                <div className="p-3.5 rounded-xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-between">
+                  <div>
+                    <span className="font-mono text-xs font-bold text-purple-300 block">
+                      HTB PRO LAB CERTIFICATION
+                    </span>
+                    <span className="text-[11px] font-mono text-gray-400">
+                      Flags this credential as an HTB Enterprise Pro Lab completion certificate.
+                    </span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={newCert.isProLab}
+                    onChange={(e) => setNewCert({ ...newCert, isProLab: e.target.checked })}
+                    className="w-5 h-5 accent-purple-500 rounded cursor-pointer"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-mono text-gray-400 uppercase mb-1">Associated Writeup Slug (Locked Writeup Link)</label>
+                    <input
+                      type="text"
+                      value={newCert.writeupSlug}
+                      onChange={(e) => setNewCert({ ...newCert, writeupSlug: e.target.value })}
+                      placeholder="e.g. htb-dante"
+                      className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-2 text-sm font-mono text-white focus:border-[#00ff66] focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs font-mono text-gray-400 uppercase">Certificate / Badge Image</label>
+                      <label className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-orange-500/10 border border-orange-500/30 rounded text-orange-400 hover:bg-orange-500/20 text-xs font-mono cursor-pointer transition-all">
+                        <Upload className="w-3 h-3" />
+                        {uploadingImage ? 'Uploading...' : 'Upload Image'}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          disabled={uploadingImage}
+                          className="hidden"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const url = await handleUploadImageFile(file, 'certificates');
+                              if (url) {
+                                setNewCert(prev => ({ ...prev, badgeImagePath: url }));
+                              }
+                            }
+                            e.target.value = '';
+                          }}
+                        />
+                      </label>
+                    </div>
+                    <input
+                      type="text"
+                      value={newCert.badgeImagePath}
+                      onChange={(e) => setNewCert({ ...newCert, badgeImagePath: e.target.value })}
+                      placeholder="https://... or /certificates/cert.png"
+                      className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-2 text-sm font-mono text-white focus:border-[#00ff66] focus:outline-none"
+                    />
+                  </div>
+                </div>
+
                 <div>
                   <label className="block text-xs font-mono text-gray-400 uppercase mb-1">Skills Covered (Comma separated)</label>
                   <input
@@ -1141,28 +1380,243 @@ export default function AdminPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {certs.map((c) => (
                 <div key={c.id} className="bg-[#0a0f14] border border-[#1b2631] rounded-xl p-5 flex items-start justify-between gap-4">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
+                  <div className="space-y-1.5 flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span className="font-mono text-base font-bold text-white">{c.name}</span>
                       <span className={`text-[10px] font-mono px-2 py-0.5 rounded font-bold uppercase ${
                         c.status === 'earned' ? 'bg-[#00ff66]/10 text-[#00ff66] border border-[#00ff66]/30' : 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
                       }`}>
                         {c.status}
                       </span>
+                      {c.isProLab && (
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded font-bold uppercase bg-purple-500/15 text-purple-300 border border-purple-500/40">
+                          HTB PRO LAB
+                        </span>
+                      )}
                     </div>
                     <p className="text-xs font-mono text-gray-300">{c.fullName}</p>
                     <p className="text-[11px] font-mono text-gray-500">{c.issuer} • {c.date}</p>
+                    {c.writeupSlug && (
+                      <p className="text-[11px] font-mono text-purple-400">
+                        Writeup: /writeups/{c.writeupSlug}
+                      </p>
+                    )}
                   </div>
 
-                  <button
-                    onClick={() => handleDeleteCert(c.id, c.name)}
-                    className="p-2 text-gray-500 hover:text-red-400 transition-colors"
-                    title="Delete certificate"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      onClick={() => setEditingCert(c)}
+                      className="p-2 text-gray-400 hover:text-orange-400 transition-colors rounded-lg hover:bg-orange-500/10"
+                      title="Edit certificate"
+                    >
+                      <Edit3 className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteCert(c.id, c.name)}
+                      className="p-2 text-gray-500 hover:text-red-400 transition-colors rounded-lg hover:bg-red-500/10"
+                      title="Delete certificate"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* TAB: TECHNIQUES & NOTES (TIL)                                             */}
+        {/* ========================================================================= */}
+        {activeTab === 'notes' && (
+          <div className="space-y-8 max-w-5xl">
+            {/* Add Note Form */}
+            <div className="bg-[#0a0f14] border border-[#1b2631] rounded-xl p-6">
+              <h2 className="text-base font-mono font-bold text-cyan-400 mb-4 flex items-center gap-2">
+                <BookOpen className="w-5 h-5" /> ADD NEW TECHNIQUE NOTE
+              </h2>
+
+              <form onSubmit={handleCreateNote} className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-mono text-gray-400 uppercase mb-1">Title *</label>
+                    <input
+                      type="text"
+                      required
+                      value={newNote.title}
+                      onChange={(e) => setNewNote({ ...newNote, title: e.target.value })}
+                      placeholder="e.g. RBCD via WebDAV Coercion"
+                      className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-2 text-sm font-mono text-white focus:border-cyan-400 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-mono text-gray-400 uppercase mb-1">Slug (URL identifier)</label>
+                    <input
+                      type="text"
+                      value={newNote.slug}
+                      onChange={(e) => setNewNote({ ...newNote, slug: e.target.value })}
+                      placeholder="Leave blank to auto-generate from title"
+                      className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-2 text-sm font-mono text-white focus:border-cyan-400 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-xs font-mono text-gray-400 uppercase mb-1">Category *</label>
+                    <input
+                      type="text"
+                      required
+                      value={newNote.category}
+                      onChange={(e) => setNewNote({ ...newNote, category: e.target.value })}
+                      placeholder="e.g. Active Directory, Web, Pivoting"
+                      className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-2 text-sm font-mono text-white focus:border-cyan-400 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-mono text-gray-400 uppercase mb-1">Date</label>
+                    <input
+                      type="text"
+                      value={newNote.date}
+                      onChange={(e) => setNewNote({ ...newNote, date: e.target.value })}
+                      placeholder="YYYY-MM-DD"
+                      className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-2 text-sm font-mono text-white focus:border-cyan-400 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-mono text-gray-400 uppercase mb-1">Read Time</label>
+                    <input
+                      type="text"
+                      value={newNote.readTime}
+                      onChange={(e) => setNewNote({ ...newNote, readTime: e.target.value })}
+                      placeholder="e.g. 3 min read"
+                      className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-2 text-sm font-mono text-white focus:border-cyan-400 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-mono text-gray-400 uppercase mb-1">Tags (Comma-separated)</label>
+                  <input
+                    type="text"
+                    value={newNote.tags}
+                    onChange={(e) => setNewNote({ ...newNote, tags: e.target.value })}
+                    placeholder="Active Directory, RBCD, Kerberos, WebDAV"
+                    className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-2 text-sm font-mono text-white focus:border-cyan-400 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-mono text-gray-400 uppercase mb-1">Summary / Quick Takeaway</label>
+                  <textarea
+                    rows={2}
+                    value={newNote.summary}
+                    onChange={(e) => setNewNote({ ...newNote, summary: e.target.value })}
+                    placeholder="Brief 1-2 sentence description of the concept or attack path."
+                    className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-2 text-sm font-mono text-white focus:border-cyan-400 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-mono text-gray-400 uppercase">
+                      Content (Markdown with Syntax Highlighting &amp; Terminal Blocks) *
+                    </label>
+                    <label className="inline-flex items-center gap-1.5 px-3 py-1 bg-cyan-500/10 border border-cyan-500/30 rounded text-cyan-400 hover:bg-cyan-500/20 text-xs font-mono cursor-pointer transition-all">
+                      <ImageIcon className="w-3.5 h-3.5" />
+                      {uploadingImage ? 'Uploading image...' : 'Upload & Insert Image'}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        disabled={uploadingImage}
+                        className="hidden"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const url = await handleUploadImageFile(file, 'notes');
+                            if (url) {
+                              setNewNote(prev => ({
+                                ...prev,
+                                content: prev.content + `\n\n![${file.name.replace(/\.[^/.]+$/, '')}](${url})\n\n`,
+                              }));
+                            }
+                          }
+                          e.target.value = '';
+                        }}
+                      />
+                    </label>
+                  </div>
+                  <textarea
+                    rows={10}
+                    required
+                    value={newNote.content}
+                    onChange={(e) => setNewNote({ ...newNote, content: e.target.value })}
+                    placeholder="## Technique Breakdown&#10;&#10;Explain the attack, commands, and tradecraft...&#10;&#10;```bash:command&#10;$ nmap -sC -sV target&#10;```"
+                    className="w-full bg-[#050708] border border-[#1b2631] rounded-lg p-3.5 text-xs font-mono text-white focus:border-cyan-400 focus:outline-none"
+                  />
+                  <p className="text-[11px] font-mono text-gray-500 mt-1">
+                    💡 Click &quot;Upload &amp; Insert Image&quot; to upload screenshots directly to Supabase storage. Markdown image tags will be inserted automatically.
+                  </p>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="px-6 py-2.5 bg-cyan-500 text-black font-mono font-bold text-xs rounded-lg hover:bg-cyan-400 transition-all flex items-center gap-2"
+                >
+                  <Plus className="w-4 h-4" /> SAVE TECHNIQUE NOTE TO LIVE DATABASE
+                </button>
+              </form>
+            </div>
+
+            {/* List of Notes */}
+            <div className="space-y-3">
+              <div className="text-xs font-mono text-gray-400 uppercase tracking-wider">
+                Published Techniques ({notes.length})
+              </div>
+              <div className="grid grid-cols-1 gap-3">
+                {notes.map((note) => (
+                  <div key={note.id} className="bg-[#0a0f14] border border-[#1b2631] hover:border-cyan-500/40 rounded-xl p-5 flex items-start justify-between gap-4 transition-all">
+                    <div className="space-y-1.5 flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-mono text-sm font-bold text-white">{note.title}</span>
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded font-bold uppercase bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">
+                          {note.category}
+                        </span>
+                        <span className="text-[10px] font-mono text-gray-500">{note.readTime || '3 min'}</span>
+                      </div>
+                      <p className="text-xs font-mono text-gray-400 line-clamp-2">{note.summary}</p>
+                      <div className="flex flex-wrap gap-1.5 pt-1">
+                        {note.tags?.map((t: string) => (
+                          <span key={t} className="text-[10px] font-mono text-gray-500 bg-[#050708] px-2 py-0.5 rounded border border-[#1b2631]">
+                            #{t}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        onClick={() => setEditingNote(note)}
+                        className="p-2 text-gray-400 hover:text-cyan-400 transition-colors rounded-lg hover:bg-cyan-500/10"
+                        title="Edit technique note"
+                      >
+                        <Edit3 className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteNote(note.id, note.title)}
+                        className="p-2 text-gray-500 hover:text-red-400 transition-colors rounded-lg hover:bg-red-500/10"
+                        title="Delete technique note"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}
@@ -1767,6 +2221,360 @@ export default function AdminPage() {
                     type="submit"
                     disabled={loading}
                     className="px-5 py-2 bg-[#00ff66] text-[#050708] font-mono font-bold text-xs rounded-lg hover:bg-[#00ff66]/90 transition-all flex items-center gap-2"
+                  >
+                    {loading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                    SAVE CHANGES
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* MODAL: EDIT CERTIFICATION                                                 */}
+        {/* ========================================================================= */}
+        {editingCert && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-[#0a0f14] border border-orange-500/40 rounded-2xl p-6 shadow-2xl space-y-5">
+              <div className="flex items-center justify-between border-b border-[#1b2631] pb-3">
+                <div className="flex items-center gap-2.5">
+                  <Award className="w-5 h-5 text-orange-400" />
+                  <h3 className="font-mono text-base font-bold text-white">
+                    EDIT CERTIFICATION: {editingCert.name}
+                  </h3>
+                </div>
+                <button
+                  onClick={() => setEditingCert(null)}
+                  className="text-gray-500 hover:text-white text-xs font-mono font-bold"
+                >
+                  ✕ CLOSE
+                </button>
+              </div>
+
+              <form onSubmit={handleUpdateCert} className="space-y-4">
+                {/* Pro Lab Toggle */}
+                <div className="p-3.5 rounded-lg bg-purple-500/10 border border-purple-500/30 flex items-center justify-between">
+                  <div>
+                    <span className="font-mono text-xs font-bold text-purple-300 block">
+                      HTB PRO LAB CERTIFICATE
+                    </span>
+                    <span className="text-[11px] font-mono text-gray-400">
+                      Show in Pro Labs tab with link to locked writeup.
+                    </span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={Boolean(editingCert.isProLab)}
+                    onChange={(e) => setEditingCert({ ...editingCert, isProLab: e.target.checked })}
+                    className="w-5 h-5 accent-purple-500 rounded cursor-pointer"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-xs font-mono text-gray-400 uppercase mb-1">Badge Acronym *</label>
+                    <input
+                      type="text"
+                      required
+                      value={editingCert.name || ''}
+                      onChange={(e) => setEditingCert({ ...editingCert, name: e.target.value })}
+                      className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-2 text-sm font-mono text-white focus:border-orange-400 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-mono text-gray-400 uppercase mb-1">Full Name *</label>
+                    <input
+                      type="text"
+                      required
+                      value={editingCert.fullName || ''}
+                      onChange={(e) => setEditingCert({ ...editingCert, fullName: e.target.value })}
+                      className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-2 text-sm font-mono text-white focus:border-orange-400 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-mono text-gray-400 uppercase mb-1">Issuer *</label>
+                    <input
+                      type="text"
+                      required
+                      value={editingCert.issuer || ''}
+                      onChange={(e) => setEditingCert({ ...editingCert, issuer: e.target.value })}
+                      className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-2 text-sm font-mono text-white focus:border-orange-400 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-xs font-mono text-gray-400 uppercase mb-1">Date</label>
+                    <input
+                      type="text"
+                      value={editingCert.date || ''}
+                      onChange={(e) => setEditingCert({ ...editingCert, date: e.target.value })}
+                      className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-2 text-sm font-mono text-white focus:border-orange-400 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-mono text-gray-400 uppercase mb-1">Status</label>
+                    <select
+                      value={editingCert.status || 'earned'}
+                      onChange={(e) => setEditingCert({ ...editingCert, status: e.target.value as any })}
+                      className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-2 text-sm font-mono text-white focus:border-orange-400 focus:outline-none"
+                    >
+                      <option value="earned">Earned</option>
+                      <option value="in-progress">In Progress</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-mono text-gray-400 uppercase mb-1">Badge Color Hex</label>
+                    <input
+                      type="text"
+                      value={editingCert.badgeColor || '#00ff66'}
+                      onChange={(e) => setEditingCert({ ...editingCert, badgeColor: e.target.value })}
+                      className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-2 text-sm font-mono text-white focus:border-orange-400 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-mono text-gray-400 uppercase mb-1">Writeup Slug (Locked Writeup)</label>
+                    <input
+                      type="text"
+                      value={editingCert.writeupSlug || ''}
+                      onChange={(e) => setEditingCert({ ...editingCert, writeupSlug: e.target.value })}
+                      placeholder="e.g. htb-dante"
+                      className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-2 text-sm font-mono text-white focus:border-orange-400 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs font-mono text-gray-400 uppercase">Certificate / Badge Image</label>
+                      <label className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-orange-500/10 border border-orange-500/30 rounded text-orange-400 hover:bg-orange-500/20 text-xs font-mono cursor-pointer transition-all">
+                        <Upload className="w-3 h-3" />
+                        {uploadingImage ? 'Uploading...' : 'Upload Image'}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          disabled={uploadingImage}
+                          className="hidden"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const url = await handleUploadImageFile(file, 'certificates');
+                              if (url) {
+                                setEditingCert((prev: any) => prev ? ({ ...prev, badgeImagePath: url }) : null);
+                              }
+                            }
+                            e.target.value = '';
+                          }}
+                        />
+                      </label>
+                    </div>
+                    <input
+                      type="text"
+                      value={editingCert.badgeImagePath || ''}
+                      onChange={(e) => setEditingCert({ ...editingCert, badgeImagePath: e.target.value })}
+                      placeholder="https://... or /certificates/cert.png"
+                      className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-2 text-sm font-mono text-white focus:border-orange-400 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-mono text-gray-400 uppercase mb-1">Skills Covered (Comma separated)</label>
+                  <input
+                    type="text"
+                    value={Array.isArray(editingCert.skillsCovered) ? editingCert.skillsCovered.join(', ') : (editingCert.skillsCovered || '')}
+                    onChange={(e) => setEditingCert({ ...editingCert, skillsCovered: e.target.value.split(',').map((s: string) => s.trim()).filter(Boolean) })}
+                    className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-2 text-sm font-mono text-white focus:border-orange-400 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-mono text-gray-400 uppercase mb-1">Description</label>
+                  <textarea
+                    rows={2}
+                    value={editingCert.description || ''}
+                    onChange={(e) => setEditingCert({ ...editingCert, description: e.target.value })}
+                    className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-2 text-sm font-mono text-white focus:border-orange-400 focus:outline-none"
+                  />
+                </div>
+
+                <div className="pt-3 border-t border-[#1b2631] flex items-center justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setEditingCert(null)}
+                    className="px-4 py-2 bg-[#0e141a] border border-[#1b2631] text-xs font-mono rounded-lg text-gray-400 hover:text-white"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="px-5 py-2 bg-orange-500 text-black font-mono font-bold text-xs rounded-lg hover:bg-orange-400 transition-all flex items-center gap-2"
+                  >
+                    {loading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                    SAVE CHANGES
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* MODAL: EDIT TECHNIQUE NOTE                                                */}
+        {/* ========================================================================= */}
+        {editingNote && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-[#0a0f14] border border-cyan-500/40 rounded-2xl p-6 shadow-2xl space-y-5">
+              <div className="flex items-center justify-between border-b border-[#1b2631] pb-3">
+                <div className="flex items-center gap-2.5">
+                  <BookOpen className="w-5 h-5 text-cyan-400" />
+                  <h3 className="font-mono text-base font-bold text-white">
+                    EDIT TECHNIQUE: {editingNote.title}
+                  </h3>
+                </div>
+                <button
+                  onClick={() => setEditingNote(null)}
+                  className="text-gray-500 hover:text-white text-xs font-mono font-bold"
+                >
+                  ✕ CLOSE
+                </button>
+              </div>
+
+              <form onSubmit={handleUpdateNote} className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-mono text-gray-400 uppercase mb-1">Title *</label>
+                    <input
+                      type="text"
+                      required
+                      value={editingNote.title || ''}
+                      onChange={(e) => setEditingNote({ ...editingNote, title: e.target.value })}
+                      className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-2 text-sm font-mono text-white focus:border-cyan-400 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-mono text-gray-400 uppercase mb-1">Slug</label>
+                    <input
+                      type="text"
+                      value={editingNote.slug || ''}
+                      onChange={(e) => setEditingNote({ ...editingNote, slug: e.target.value })}
+                      className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-2 text-sm font-mono text-white focus:border-cyan-400 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-xs font-mono text-gray-400 uppercase mb-1">Category *</label>
+                    <input
+                      type="text"
+                      required
+                      value={editingNote.category || ''}
+                      onChange={(e) => setEditingNote({ ...editingNote, category: e.target.value })}
+                      className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-2 text-sm font-mono text-white focus:border-cyan-400 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-mono text-gray-400 uppercase mb-1">Date</label>
+                    <input
+                      type="text"
+                      value={editingNote.date || ''}
+                      onChange={(e) => setEditingNote({ ...editingNote, date: e.target.value })}
+                      className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-2 text-sm font-mono text-white focus:border-cyan-400 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-mono text-gray-400 uppercase mb-1">Read Time</label>
+                    <input
+                      type="text"
+                      value={editingNote.readTime || ''}
+                      onChange={(e) => setEditingNote({ ...editingNote, readTime: e.target.value })}
+                      className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-2 text-sm font-mono text-white focus:border-cyan-400 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-mono text-gray-400 uppercase mb-1">Tags (Comma-separated)</label>
+                  <input
+                    type="text"
+                    value={Array.isArray(editingNote.tags) ? editingNote.tags.join(', ') : (editingNote.tags || '')}
+                    onChange={(e) => setEditingNote({ ...editingNote, tags: e.target.value.split(',').map((t: string) => t.trim()).filter(Boolean) })}
+                    className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-2 text-sm font-mono text-white focus:border-cyan-400 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-mono text-gray-400 uppercase mb-1">Summary</label>
+                  <textarea
+                    rows={2}
+                    value={editingNote.summary || ''}
+                    onChange={(e) => setEditingNote({ ...editingNote, summary: e.target.value })}
+                    className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-2 text-sm font-mono text-white focus:border-cyan-400 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-mono text-gray-400 uppercase">
+                      Content (Markdown)
+                    </label>
+                    <label className="inline-flex items-center gap-1.5 px-3 py-1 bg-cyan-500/10 border border-cyan-500/30 rounded text-cyan-400 hover:bg-cyan-500/20 text-xs font-mono cursor-pointer transition-all">
+                      <ImageIcon className="w-3.5 h-3.5" />
+                      {uploadingImage ? 'Uploading...' : 'Upload & Insert Image'}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        disabled={uploadingImage}
+                        className="hidden"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const url = await handleUploadImageFile(file, 'notes');
+                            if (url) {
+                              setEditingNote((prev: any) => prev ? ({
+                                ...prev,
+                                content: (prev.content || '') + `\n\n![${file.name.replace(/\.[^/.]+$/, '')}](${url})\n\n`,
+                              }) : null);
+                            }
+                          }
+                          e.target.value = '';
+                        }}
+                      />
+                    </label>
+                  </div>
+                  <textarea
+                    rows={10}
+                    value={editingNote.content || ''}
+                    onChange={(e) => setEditingNote({ ...editingNote, content: e.target.value })}
+                    className="w-full bg-[#050708] border border-[#1b2631] rounded-lg p-3.5 text-xs font-mono text-white focus:border-cyan-400 focus:outline-none"
+                  />
+                </div>
+
+                <div className="pt-3 border-t border-[#1b2631] flex items-center justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setEditingNote(null)}
+                    className="px-4 py-2 bg-[#0e141a] border border-[#1b2631] text-xs font-mono rounded-lg text-gray-400 hover:text-white"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="px-5 py-2 bg-cyan-500 text-black font-mono font-bold text-xs rounded-lg hover:bg-cyan-400 transition-all flex items-center gap-2"
                   >
                     {loading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
                     SAVE CHANGES

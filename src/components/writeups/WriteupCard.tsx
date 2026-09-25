@@ -49,20 +49,28 @@ export default function WriteupCard({ writeup }: WriteupCardProps) {
           <ArrowUpRight className="w-4 h-4 text-gray-500 group-hover:text-[#00ff66] group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
         </div>
 
-        {/* Short Summary */}
-        <p className="text-gray-400 text-xs sm:text-sm font-sans leading-relaxed line-clamp-2 mb-4">
-          {writeup.summary}
-        </p>
+        {/* Short Summary - Only for Retired machines to prevent spoiling active labs */}
+        {writeup.isRetired && writeup.summary && (
+          <p className="text-gray-400 text-xs sm:text-sm font-sans leading-relaxed line-clamp-2 mb-4">
+            {writeup.summary}
+          </p>
+        )}
 
-        {/* Attack Vectors summary */}
-        <div className="mb-4 p-2.5 rounded-lg bg-[#070b0e] border border-[#17212a] font-mono text-[11px] space-y-1 text-gray-400">
-          <div className="truncate">
-            <span className="text-[#00ff66] font-semibold">FOOTHOLD:</span> {writeup.initialAccessVector}
+        {/* Attack Vectors summary - Only for Retired machines */}
+        {writeup.isRetired && (writeup.initialAccessVector || writeup.privEscVector) && (
+          <div className="mb-4 p-2.5 rounded-lg bg-[#070b0e] border border-[#17212a] font-mono text-[11px] space-y-1 text-gray-400">
+            {writeup.initialAccessVector && (
+              <div className="truncate">
+                <span className="text-[#00ff66] font-semibold">FOOTHOLD:</span> {writeup.initialAccessVector}
+              </div>
+            )}
+            {writeup.privEscVector && (
+              <div className="truncate">
+                <span className="text-amber-400 font-semibold">PRIVESC:</span> {writeup.privEscVector}
+              </div>
+            )}
           </div>
-          <div className="truncate">
-            <span className="text-amber-400 font-semibold">PRIVESC:</span> {writeup.privEscVector}
-          </div>
-        </div>
+        )}
 
         {/* Tags */}
         <div className="flex flex-wrap gap-1.5 mb-4">

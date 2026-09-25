@@ -1,7 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
-import { Writeup, Certification } from '@/types';
+import { Writeup, Certification, TilNote } from '@/types';
 import { writeups as fallbackWriteups } from '@/data/writeups';
 import { certifications as fallbackCerts } from '@/data/certifications';
+import { tilNotes as fallbackTilNotes } from '@/data/til';
 
 const DEFAULT_SUPABASE_URL = 'https://bhtzmnhmdlmsuxivwgua.supabase.co';
 const DEFAULT_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJodHptbmhtZGxtc3V4aXZ3Z3VhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg0MDIwNzEsImV4cCI6MjEwMzk3ODA3MX0.ub5aHUHbTpLc6tvzcFVuCp8CE6JpOqXi9NBCDpIXKbg';
@@ -65,6 +66,25 @@ export function mapDbToCert(row: any): Certification {
     description: row.description || '',
     skillsCovered: row.skills_covered || [],
     verificationUrl: row.verification_url || undefined,
+    isProLab: Boolean(row.is_pro_lab),
+    writeupSlug: row.writeup_slug || undefined,
+    badgeImagePath: row.badge_image_path || undefined,
+  };
+}
+
+// Map database row to TilNote type
+export function mapDbToTilNote(row: any): TilNote {
+  return {
+    id: row.id,
+    slug: row.slug,
+    title: row.title,
+    category: row.category || 'Tooling',
+    date: row.date,
+    tags: row.tags || [],
+    readTime: row.read_time || '3 min read',
+    summary: row.summary || '',
+    content: row.content || '',
+    imageUrls: row.image_urls || [],
   };
 }
 
@@ -146,5 +166,26 @@ export async function getCertificates(): Promise<Certification[]> {
   } catch (err) {
     console.error('Error querying certificates from Supabase:', err);
     return fallbackCerts;
+  }
+}
+
+/**
+ * Fetch all TIL / Technique notes from Supabase.
+ */
+export async function getTilNotes(): Promise<TilNote[]> {
+  try {
+    const { data, error } = await supabase
+      .from('til_notes')
+      .select('*')
+      .order('display_order', { ascending: true });
+
+    if (error || !data || data.length === 0) {
+      return fallbackTilNotes;
+    }
+
+    return data.map(mapDbToTilNote);
+  } catch (err) {
+    console.error('Error querying til_notes from Supabase:', err);
+    return fallbackTilNotes;
   }
 }

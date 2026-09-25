@@ -22,7 +22,12 @@ export async function GET() {
 
     const sanitized = data.map((row) => {
       const mapped = mapDbToWriteup(row);
-      if (!isWriteupRetired(row)) mapped.content = '';
+      if (!isWriteupRetired(row)) {
+        mapped.content = '';
+        mapped.summary = '';
+        mapped.initialAccessVector = '';
+        mapped.privEscVector = '';
+      }
       return mapped;
     });
 

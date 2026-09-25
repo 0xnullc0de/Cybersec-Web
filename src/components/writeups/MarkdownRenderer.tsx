@@ -139,23 +139,19 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
                     const isKey = line.includes('UserName:') || line.includes('Password:') || line.includes('FLAG') || line.includes('HTB{');
 
                     return (
-                      <div key={lineIdx} className="table-row">
-                        <span className="table-cell pr-4 text-right select-none text-gray-600 text-[11px] w-8 font-mono">
-                          {lineIdx + 1}
-                        </span>
-                        <span
-                          className={`table-cell font-mono ${
-                            isPrompt
-                              ? 'text-[#00ff66] font-bold'
-                              : isSuccess
-                              ? 'text-emerald-400 font-semibold'
-                              : isKey
-                              ? 'text-amber-300 font-bold'
-                              : 'text-gray-300'
-                          }`}
-                        >
-                          {line}
-                        </span>
+                      <div
+                        key={lineIdx}
+                        className={`font-mono leading-relaxed ${
+                          isPrompt
+                            ? 'text-[#00ff66] font-bold'
+                            : isSuccess
+                            ? 'text-emerald-400 font-semibold'
+                            : isKey
+                            ? 'text-amber-300 font-bold'
+                            : 'text-gray-300'
+                        }`}
+                      >
+                        {line || ' '}
                       </div>
                     );
                   })}

@@ -40,18 +40,22 @@ export interface Certification {
   description: string;
   skillsCovered: string[];
   verificationUrl?: string;
+  isProLab?: boolean;
+  writeupSlug?: string;
+  badgeImagePath?: string;
 }
 
 export interface TilNote {
   id: string;
   slug: string;
   title: string;
-  category: 'Active Directory' | 'Privilege Escalation' | 'Web Security' | 'Reverse Engineering' | 'Tooling' | 'Evasion';
+  category: string;
   date: string;
   tags: string[];
   readTime: string;
   summary: string;
   content: string;
+  imageUrls?: string[];
 }
 
 export interface SiteConfig {
