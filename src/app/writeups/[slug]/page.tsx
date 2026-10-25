@@ -6,6 +6,7 @@ import PlatformBadge from '@/components/ui/PlatformBadge';
 import DifficultyBadge from '@/components/ui/DifficultyBadge';
 import MarkdownRenderer from '@/components/writeups/MarkdownRenderer';
 import TableOfContents from '@/components/writeups/TableOfContents';
+import AttackFlowAndMitre from '@/components/writeups/AttackFlowAndMitre';
 import RetirementGate from '@/components/writeups/RetirementGate';
 import DownloadButtons from '@/components/writeups/DownloadButtons';
 import { 
@@ -163,6 +164,11 @@ export default async function WriteupDetailPage({ params }: WriteupPageProps) {
             ))}
           </div>
         </div>
+
+        {/* Visual Attack Flow & MITRE ATT&CK Matrix (Only shown for retired machines) */}
+        {retiredNow && (
+          <AttackFlowAndMitre slug={writeup.slug} tags={writeup.tags} />
+        )}
       </header>
 
       {/* 2-Column Responsive Layout: Main Article & Sticky Table of Contents */}
