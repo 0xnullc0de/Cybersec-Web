@@ -30,11 +30,20 @@ export default function WriteupsPage() {
       .catch((err) => console.error('Error fetching live writeups:', err));
   }, []);
 
-  // Extract unique tags from all writeups
+  // Extract unique tags from all writeups, preserving chronological order of newest writeups
   const availableTags = useMemo(() => {
-    const set = new Set<string>();
-    allWriteups.forEach((w) => w.tags.forEach((t) => set.add(t)));
-    return Array.from(set);
+    const seen = new Set<string>();
+    const result: string[] = [];
+    allWriteups.forEach((w) => {
+      (w.tags || []).forEach((raw) => {
+        const clean = raw.trim().replace(/^#/, '');
+        if (clean && !seen.has(clean.toLowerCase())) {
+          seen.add(clean.toLowerCase());
+          result.push(clean);
+        }
+      });
+    });
+    return result;
   }, [allWriteups]);
 
   // Filtered writeups calculation
@@ -45,13 +54,14 @@ export default function WriteupsPage() {
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const matchesTitle = w.title.toLowerCase().includes(q);
-        const matchesSummary = w.summary.toLowerCase().includes(q);
+        const matchesSummary = (w.summary || '').toLowerCase().includes(q);
         const matchesVectors =
-          w.initialAccessVector.toLowerCase().includes(q) ||
-          w.privEscVector.toLowerCase().includes(q);
-        const matchesTags = w.tags.some((t) => t.toLowerCase().includes(q));
-        const matchesOs = w.os.toLowerCase().includes(q);
-        if (!matchesTitle && !matchesSummary && !matchesVectors && !matchesTags && !matchesOs) {
+          (w.initialAccessVector || '').toLowerCase().includes(q) ||
+          (w.privEscVector || '').toLowerCase().includes(q);
+        const matchesTags = (w.tags || []).some((t) => t.toLowerCase().includes(q));
+        const matchesOs = (w.os || '').toLowerCase().includes(q);
+        const matchesDifficulty = (w.difficulty || '').toLowerCase().includes(q);
+        if (!matchesTitle && !matchesSummary && !matchesVectors && !matchesTags && !matchesOs && !matchesDifficulty) {
           return false;
         }
       }
@@ -67,8 +77,10 @@ export default function WriteupsPage() {
       }
 
       // 3. Difficulty filter
-      if (selectedDifficulty !== 'All' && w.difficulty !== selectedDifficulty) {
-        return false;
+      if (selectedDifficulty !== 'All') {
+        if ((w.difficulty || '').toLowerCase() !== selectedDifficulty.toLowerCase()) {
+          return false;
+        }
       }
 
       // 4. Status filter
@@ -82,9 +94,15 @@ export default function WriteupsPage() {
         return false;
       }
 
-      // 5. Tag filter
-      if (selectedTag !== 'all' && !w.tags.includes(selectedTag)) {
-        return false;
+      // 5. Tag filter (case-insensitive & stripped hash)
+      if (selectedTag !== 'all') {
+        const target = selectedTag.toLowerCase().replace(/^#/, '').trim();
+        const hasTag = (w.tags || []).some(
+          (t) => t.toLowerCase().replace(/^#/, '').trim() === target
+        );
+        if (!hasTag) {
+          return false;
+        }
       }
 
       return true;

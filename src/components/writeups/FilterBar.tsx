@@ -43,14 +43,41 @@ export default function FilterBar({
   totalCount,
   filteredCount,
 }: FilterBarProps) {
+  const [isTagsExpanded, setIsTagsExpanded] = React.useState(false);
+  const [tagSearchQuery, setTagSearchQuery] = React.useState('');
+
   const platforms = ['All', 'HTB', 'HTB Pro Lab', 'THM'];
-  const difficulties = ['All', 'Easy', 'Medium', 'Hard'];
+  const difficulties = ['All', 'Easy', 'Medium', 'Hard', 'Insane'];
   const statuses = [
     { label: 'All Status', value: 'all' },
     { label: '🏢 Pro Labs (Locked)', value: 'pro-lab' },
     { label: '✓ Retired (Full)', value: 'retired' },
     { label: '🔒 Active (Preview)', value: 'active' },
   ];
+
+  // Filter tags based on tagSearchQuery
+  const filteredTags = React.useMemo(() => {
+    if (!tagSearchQuery.trim()) return availableTags;
+    const q = tagSearchQuery.toLowerCase().trim();
+    return availableTags.filter((t) => t.toLowerCase().includes(q));
+  }, [availableTags, tagSearchQuery]);
+
+  const INITIAL_TAG_LIMIT = 24;
+  const displayedTags = React.useMemo(() => {
+    if (tagSearchQuery.trim() || isTagsExpanded) {
+      return filteredTags;
+    }
+    const base = filteredTags.slice(0, INITIAL_TAG_LIMIT);
+    // If selectedTag is active and not in the initial slice, ensure it's displayed so user sees their active selection
+    if (
+      selectedTag !== 'all' &&
+      !base.some((t) => t.toLowerCase() === selectedTag.toLowerCase()) &&
+      availableTags.some((t) => t.toLowerCase() === selectedTag.toLowerCase())
+    ) {
+      return [selectedTag, ...base];
+    }
+    return base;
+  }, [filteredTags, isTagsExpanded, tagSearchQuery, selectedTag, availableTags]);
 
   return (
     <div className="space-y-4 mb-10 p-5 rounded-2xl bg-[#0a0f14] border border-[#1b2631] shadow-xl">
@@ -173,42 +200,105 @@ export default function FilterBar({
         </div>
       </div>
 
-      {/* Popular Tags row */}
-      <div className="pt-3 border-t border-[#17222c] flex flex-wrap items-center gap-1.5">
-        <span className="text-[11px] font-mono text-gray-500 mr-1">FILTER TAG:</span>
-        <button
-          onClick={() => setSelectedTag('all')}
-          className={`px-2 py-0.5 rounded text-[11px] font-mono ${
-            selectedTag === 'all'
-              ? 'bg-white/10 text-white font-bold border border-white/20'
-              : 'text-gray-400 hover:text-white'
+      {/* Dynamic Tags row */}
+      <div className="pt-3 border-t border-[#17222c] space-y-2">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-mono text-gray-500 uppercase tracking-wider">
+              FILTER TAG:
+            </span>
+            <span className="text-[10px] font-mono text-gray-500">
+              ({availableTags.length} available)
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2 ml-auto">
+            {/* Quick Tag Search Input */}
+            {availableTags.length > 8 && (
+              <div className="relative inline-flex items-center">
+                <Search className="w-3 h-3 text-gray-500 absolute left-2 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="Find tag (e.g. BackupOperators)..."
+                  value={tagSearchQuery}
+                  onChange={(e) => setTagSearchQuery(e.target.value)}
+                  className="pl-6 pr-5 py-1 rounded text-[11px] font-mono bg-[#0e151b] border border-[#22313f] text-gray-200 placeholder-gray-500 focus:outline-none focus:border-[#00ff66] w-36 sm:w-56 transition-all"
+                />
+                {tagSearchQuery && (
+                  <button
+                    onClick={() => setTagSearchQuery('')}
+                    className="absolute right-1.5 text-gray-400 hover:text-white"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+            )}
+
+            {hasActiveFilters && (
+              <button
+                onClick={() => {
+                  setTagSearchQuery('');
+                  onReset();
+                }}
+                className="inline-flex items-center gap-1 text-[11px] font-mono text-red-400 hover:text-red-300 underline"
+              >
+                <X className="w-3 h-3" />
+                <span>Reset All Filters</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Tags Chips Container */}
+        <div
+          className={`flex flex-wrap items-center gap-1.5 transition-all ${
+            isTagsExpanded ? 'max-h-64 overflow-y-auto pr-1' : ''
           }`}
         >
-          All Tags
-        </button>
-        {availableTags.slice(0, 8).map((tag) => (
           <button
-            key={tag}
-            onClick={() => setSelectedTag(selectedTag === tag ? 'all' : tag)}
+            onClick={() => setSelectedTag('all')}
             className={`px-2 py-0.5 rounded text-[11px] font-mono transition-all ${
-              selectedTag === tag
-                ? 'bg-[#00ff66]/20 text-[#00ff66] border border-[#00ff66]/50 font-bold'
-                : 'bg-[#0e151b] text-gray-400 border border-[#22313f] hover:border-[#00ff66]/30 hover:text-gray-200'
+              selectedTag === 'all'
+                ? 'bg-white/10 text-white font-bold border border-white/20'
+                : 'text-gray-400 hover:text-white'
             }`}
           >
-            #{tag}
+            All Tags
           </button>
-        ))}
 
-        {hasActiveFilters && (
-          <button
-            onClick={onReset}
-            className="ml-auto inline-flex items-center gap-1 text-[11px] font-mono text-red-400 hover:text-red-300 underline"
-          >
-            <X className="w-3 h-3" />
-            <span>Reset All Filters</span>
-          </button>
-        )}
+          {displayedTags.map((tag) => {
+            const isSelected = selectedTag.toLowerCase() === tag.toLowerCase();
+            return (
+              <button
+                key={tag}
+                onClick={() => setSelectedTag(isSelected ? 'all' : tag)}
+                className={`px-2 py-0.5 rounded text-[11px] font-mono transition-all ${
+                  isSelected
+                    ? 'bg-[#00ff66]/20 text-[#00ff66] border border-[#00ff66]/50 font-bold shadow-sm'
+                    : 'bg-[#0e151b] text-gray-400 border border-[#22313f] hover:border-[#00ff66]/30 hover:text-gray-200'
+                }`}
+              >
+                #{tag}
+              </button>
+            );
+          })}
+
+          {!tagSearchQuery.trim() && filteredTags.length > INITIAL_TAG_LIMIT && (
+            <button
+              onClick={() => setIsTagsExpanded((prev) => !prev)}
+              className="px-2 py-0.5 rounded text-[11px] font-mono text-[#00ff66] bg-[#00ff66]/10 border border-[#00ff66]/30 hover:bg-[#00ff66]/20 transition-all font-semibold"
+            >
+              {isTagsExpanded ? 'Show Less' : `+${filteredTags.length - INITIAL_TAG_LIMIT} more`}
+            </button>
+          )}
+
+          {tagSearchQuery.trim() && displayedTags.length === 0 && (
+            <span className="text-[11px] font-mono text-gray-500 italic py-0.5">
+              No tags matching &quot;{tagSearchQuery}&quot;
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );
