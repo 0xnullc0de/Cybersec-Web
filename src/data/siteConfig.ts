@@ -9,7 +9,7 @@ export const siteConfig: SiteConfig = {
   socials: {
     github: "https://github.com/0xnullc0de",
     linkedin: "https://www.linkedin.com/in/maxwell-wachira-05b991344/",
-    twitter: "https://twitter.com/Nullbyt3_sec",
+    twitter: "https://x.com/MaxwellWac79412",
     htb: "https://app.hackthebox.com/users/2029291",
     thm: "https://tryhackme.com/p/Nullbyt3",
     email: "maxwellwachira100@gmail.com",
