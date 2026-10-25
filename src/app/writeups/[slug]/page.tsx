@@ -167,7 +167,7 @@ export default async function WriteupDetailPage({ params }: WriteupPageProps) {
 
         {/* Visual Attack Flow & MITRE ATT&CK Matrix (Only shown for retired machines) */}
         {retiredNow && (
-          <AttackFlowAndMitre slug={writeup.slug} tags={writeup.tags} />
+          <AttackFlowAndMitre writeup={writeup} />
         )}
       </header>
 

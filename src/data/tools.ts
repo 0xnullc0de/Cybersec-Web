@@ -2,7 +2,7 @@ import { Tool } from '@/types';
 
 export const fallbackTools: Tool[] = [
   {
-    id: 'tool-blackfield-backup',
+    id: 'd0000001-0000-4000-a000-000000000001',
     name: 'BackupOperator-Dump',
     description: 'Automation script for leveraging Windows Backup Operators group privileges (SeBackupPrivilege / SeRestorePrivilege) to safely extract NTDS.dit and the SYSTEM registry hive via disk shadow or robocopy without interactive prompt lag.',
     language: 'Python',
@@ -14,7 +14,7 @@ export const fallbackTools: Tool[] = [
     createdAt: '2024-05-10',
   },
   {
-    id: 'tool-bloodhound-quickfilter',
+    id: 'd0000002-0000-4000-a000-000000000002',
     name: 'BloodHound Quick-Triage',
     description: 'CLI triage helper and Cypher query launcher to rapidly identify high-probability privilege escalation pathways, kerberoastable admins, and unconstrained delegation paths from Neo4j.',
     language: 'Python',
@@ -25,7 +25,7 @@ export const fallbackTools: Tool[] = [
     createdAt: '2024-06-15',
   },
   {
-    id: 'tool-chisel-pivot-manager',
+    id: 'd0000003-0000-4000-a000-000000000003',
     name: 'Chisel-Socks AutoPivot',
     description: 'Lightweight bash automation script to spin up reverse Chisel tunnels, configure proxychains automatically, and monitor SOCKS5 port forwarding stability during multi-hop lab engagements.',
     language: 'Bash',
