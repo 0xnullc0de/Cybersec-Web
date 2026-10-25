@@ -5,6 +5,7 @@ import { writeups } from '@/data/writeups';
 import PlatformBadge from '@/components/ui/PlatformBadge';
 import DifficultyBadge from '@/components/ui/DifficultyBadge';
 import MarkdownRenderer from '@/components/writeups/MarkdownRenderer';
+import TableOfContents from '@/components/writeups/TableOfContents';
 import RetirementGate from '@/components/writeups/RetirementGate';
 import DownloadButtons from '@/components/writeups/DownloadButtons';
 import { 
@@ -49,7 +50,7 @@ export default async function WriteupDetailPage({ params }: WriteupPageProps) {
     : (writeup.previewContent || '');
 
   return (
-    <article className="pt-24 pb-20 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+    <article className="pt-24 pb-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       {/* Back to writeups link */}
       <div className="mb-6 no-print">
         <Link
@@ -164,35 +165,43 @@ export default async function WriteupDetailPage({ params }: WriteupPageProps) {
         </div>
       </header>
 
-      {/* Main Content Area */}
-      <div className="bg-[#080c10] border border-[#17222c] rounded-2xl p-6 sm:p-10 shadow-xl print-clean">
-        {retiredNow ? (
-          /* RETIRED MACHINE: Full unhindered content */
-          <div className="space-y-8">
-            <div className="flex items-center justify-between border-b border-[#1b2631] pb-4">
-              <div className="font-mono text-xs text-[#00ff66] uppercase font-semibold flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-[#00ff66]" />
-                <span>UNRESTRICTED CTF DOCUMENTATION // FULL CHAIN VERIFIED</span>
+      {/* 2-Column Responsive Layout: Main Article & Sticky Table of Contents */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        {/* Main Content Area */}
+        <div className="lg:col-span-8 xl:col-span-9 bg-[#080c10] border border-[#17222c] rounded-2xl p-6 sm:p-10 shadow-xl print-clean">
+          {retiredNow ? (
+            /* RETIRED MACHINE: Full unhindered content */
+            <div className="space-y-8">
+              <div className="flex items-center justify-between border-b border-[#1b2631] pb-4">
+                <div className="font-mono text-xs text-[#00ff66] uppercase font-semibold flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-[#00ff66]" />
+                  <span>UNRESTRICTED CTF DOCUMENTATION // FULL CHAIN VERIFIED</span>
+                </div>
+                <span className="text-gray-500 text-xs font-mono">MD5 VERIFIED</span>
               </div>
-              <span className="text-gray-500 text-xs font-mono">MD5 VERIFIED</span>
+
+              <MarkdownRenderer content={writeup.content} />
             </div>
+          ) : (
+            /* ACTIVE MACHINE: Initial Recon Preview + Server-Gated RetirementGate */
+            <div className="space-y-8">
+              <MarkdownRenderer content={activeSafePreview} />
 
-            <MarkdownRenderer content={writeup.content} />
-          </div>
-        ) : (
-          /* ACTIVE MACHINE: Initial Recon Preview + Server-Gated RetirementGate */
-          <div className="space-y-8">
-            <MarkdownRenderer content={activeSafePreview} />
+              <RetirementGate
+                slug={writeup.slug}
+                previewContent={activeSafePreview}
+                machineTitle={writeup.title}
+                retirementDate={writeup.retirementDate}
+                platform={writeup.platform}
+              />
+            </div>
+          )}
+        </div>
 
-            <RetirementGate
-              slug={writeup.slug}
-              previewContent={activeSafePreview}
-              machineTitle={writeup.title}
-              retirementDate={writeup.retirementDate}
-              platform={writeup.platform}
-            />
-          </div>
-        )}
+        {/* Right Sticky Sidebar: Navigation & Table of Contents */}
+        <div className="lg:col-span-4 xl:col-span-3">
+          <TableOfContents content={retiredNow ? writeup.content : activeSafePreview} />
+        </div>
       </div>
 
 

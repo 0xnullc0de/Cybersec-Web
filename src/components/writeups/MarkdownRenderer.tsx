@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Copy, Check, Terminal, Command, ExternalLink, Image as ImageIcon } from 'lucide-react';
+import { Copy, Check, Terminal, Command, ExternalLink, Image as ImageIcon, CheckCheck } from 'lucide-react';
+import { slugifyHeading } from './TableOfContents';
 
 interface MarkdownRendererProps {
   content: string;
@@ -11,9 +12,22 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
 
   const copyToClipboard = (text: string, index: number) => {
-    navigator.clipboard.writeText(text);
+    // Clean prompt symbols like leading '$ ', '# ', or '> ' for seamless terminal pasting
+    const lines = text.split('\n');
+    const cleaned = lines
+      .map((l) => {
+        const trimmed = l.trim();
+        if (trimmed.startsWith('$ ')) return trimmed.slice(2);
+        if (trimmed.startsWith('# ')) return trimmed.slice(2);
+        if (trimmed.startsWith('> ')) return trimmed.slice(2);
+        return l;
+      })
+      .join('\n')
+      .trim();
+
+    navigator.clipboard.writeText(cleaned || text);
     setCopiedIndex(index);
-    setTimeout(() => setCopiedIndex(null), 2000);
+    setTimeout(() => setCopiedIndex(null), 2500);
   };
 
   // Ensure any dangling/unclosed code fences are automatically closed
@@ -36,6 +50,7 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
         if (part.startsWith('```')) {
           codeBlockCounter++;
           const blockId = codeBlockCounter;
+          const isCopied = copiedIndex === blockId;
           // Match language with optional :command tag (e.g. ```bash:command, ```javascript, etc.)
           const match = part.match(/^```([a-zA-Z0-9_:-]*)[ \t]*\r?\n([\s\S]*?)```$/);
           let fullLang = 'bash';
@@ -67,23 +82,27 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
           return (
             <div
               key={index}
-              className={`my-6 rounded-xl overflow-hidden font-mono text-xs sm:text-sm shadow-2xl transition-all ${
-                isExplicitCommand
+              className={`my-6 rounded-xl overflow-hidden font-mono text-xs sm:text-sm shadow-2xl transition-all duration-300 ${
+                isCopied
+                  ? 'border-2 border-[#00ff66] shadow-[0_0_25px_rgba(0,255,102,0.3)] ring-1 ring-[#00ff66]/50 bg-[#04080a]'
+                  : isExplicitCommand
                   ? 'bg-[#040608] border-2 border-[#00ff66]/40 shadow-[0_0_20px_rgba(0,255,102,0.12)]'
                   : 'bg-[#06090c] border border-[#1b2631]'
               }`}
             >
               {/* Terminal Title Bar */}
               <div
-                className={`px-4 py-2.5 border-b flex items-center justify-between ${
-                  isExplicitCommand
+                className={`px-4 py-2.5 border-b flex items-center justify-between transition-colors ${
+                  isCopied
+                    ? 'bg-[#08170e] border-[#00ff66]/60 text-[#00ff66]'
+                    : isExplicitCommand
                     ? 'bg-[#09110d] border-[#00ff66]/30 text-[#00ff66]'
                     : 'bg-[#0d141b] border-[#1b2631] text-gray-400'
                 }`}
               >
                 <div className="flex items-center gap-2">
                   <div className="flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 rounded-full bg-red-500/70" />
+                    <span className={`w-2.5 h-2.5 rounded-full ${isCopied ? 'bg-[#00ff66] animate-pulse' : 'bg-red-500/70'}`} />
                     <span className="w-2.5 h-2.5 rounded-full bg-yellow-500/70" />
                     <span className="w-2.5 h-2.5 rounded-full bg-green-500/70" />
                   </div>
@@ -105,15 +124,20 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
                   </span>
                 </div>
 
+                {/* Enhanced One-Click Copy Button with Terminal Feedback */}
                 <button
                   onClick={() => copyToClipboard(rawCode.trim(), blockId)}
-                  className="px-2.5 py-1 rounded bg-[#151f28] hover:bg-[#1c2936] text-gray-300 hover:text-white transition-colors flex items-center gap-1.5 text-[11px] font-mono"
-                  title="Copy command"
+                  className={`px-3 py-1 rounded transition-all duration-200 flex items-center gap-1.5 text-[11px] font-mono font-bold ${
+                    isCopied
+                      ? 'bg-[#00ff66] text-black shadow-[0_0_12px_rgba(0,255,102,0.8)]'
+                      : 'bg-[#151f28] hover:bg-[#1c2936] text-gray-300 hover:text-white border border-[#22313f] hover:border-[#00ff66]/40'
+                  }`}
+                  title="Copy command to clipboard (strips leading prompts automatically)"
                 >
-                  {copiedIndex === blockId ? (
+                  {isCopied ? (
                     <>
-                      <Check className="w-3.5 h-3.5 text-[#00ff66]" />
-                      <span className="text-[#00ff66] font-bold">COPIED</span>
+                      <CheckCheck className="w-3.5 h-3.5 text-black animate-pulse" />
+                      <span>$ COPIED!</span>
                     </>
                   ) : (
                     <>
@@ -193,28 +217,50 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
                 );
               }
 
-              // H2 Header
+              // H2 Header with Anchor ID for Table of Contents
               if (trimmed.startsWith('## ')) {
+                const headingText = trimmed.replace('## ', '').trim();
+                const headingId = slugifyHeading(headingText);
+
                 return (
                   <h2
                     key={lIdx}
-                    className="font-mono text-xl sm:text-2xl font-bold text-white pt-6 pb-2 border-b border-[#1b2631] flex items-center gap-2"
+                    id={headingId}
+                    className="font-mono text-xl sm:text-2xl font-bold text-white pt-6 pb-2 border-b border-[#1b2631] flex items-center gap-2 scroll-mt-28 group"
                   >
                     <span className="text-[#00ff66]">#</span>
-                    <span>{trimmed.replace('## ', '')}</span>
+                    <span>{headingText}</span>
+                    <a
+                      href={`#${headingId}`}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-500 hover:text-[#00ff66] text-sm ml-1"
+                      aria-label={`Link to ${headingText}`}
+                    >
+                      #
+                    </a>
                   </h2>
                 );
               }
 
-              // H3 Header
+              // H3 Header with Anchor ID for Table of Contents
               if (trimmed.startsWith('### ')) {
+                const headingText = trimmed.replace('### ', '').trim();
+                const headingId = slugifyHeading(headingText);
+
                 return (
                   <h3
                     key={lIdx}
-                    className="font-mono text-lg font-semibold text-[#00ff66] pt-4 flex items-center gap-1.5"
+                    id={headingId}
+                    className="font-mono text-lg font-semibold text-[#00ff66] pt-4 flex items-center gap-1.5 scroll-mt-28 group"
                   >
                     <span>&gt;&gt;</span>
-                    <span>{trimmed.replace('### ', '')}</span>
+                    <span>{headingText}</span>
+                    <a
+                      href={`#${headingId}`}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-500 hover:text-[#00ff66] text-xs ml-1"
+                      aria-label={`Link to ${headingText}`}
+                    >
+                      #
+                    </a>
                   </h3>
                 );
               }
