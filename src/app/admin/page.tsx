@@ -158,7 +158,7 @@ export default function AdminPage() {
       }
 
       // Fetch certs
-      const cRes = await fetch('/api/certificates');
+      const cRes = await fetch(`/api/certificates?t=${Date.now()}`, { cache: 'no-store' });
       if (cRes.ok) {
         const cData = await cRes.json();
         setCerts(cData || []);
@@ -411,7 +411,11 @@ export default function AdminPage() {
         body: JSON.stringify(editingCert),
       });
       if (res.ok) {
+        const updatedCert = await res.json().catch(() => null);
         setMessage({ type: 'success', text: `Certificate "${editingCert.name}" updated successfully!` });
+        if (updatedCert && updatedCert.id) {
+          setCerts((prev) => prev.map((c) => (c.id === editingCert.id ? updatedCert : c)));
+        }
         setEditingCert(null);
         fetchData(adminKey);
       } else {
@@ -590,7 +594,11 @@ export default function AdminPage() {
       const res = await fetch(`/api/certificates/${id}`, { method: 'DELETE' });
       if (res.ok) {
         setMessage({ type: 'success', text: `Deleted certificate "${name}"` });
+        setCerts((prev) => prev.filter((c) => c.id !== id && c.name !== name));
         fetchData(adminKey);
+      } else {
+        const d = await res.json().catch(() => ({}));
+        setMessage({ type: 'error', text: d.error || 'Failed to delete certificate' });
       }
     } catch (e: any) {
       setMessage({ type: 'error', text: e.message });

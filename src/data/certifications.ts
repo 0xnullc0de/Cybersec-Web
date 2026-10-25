@@ -48,16 +48,4 @@ export const certifications: Certification[] = [
     description: "Advanced adversary simulation utilizing Cobalt Strike, C2 architecture, AMSI/ETW bypasses, Kerberos delegations, DACL abuse, and stealth domain dominance.",
     skillsCovered: ["Cobalt Strike C2", "OPSEC Tradecraft", "EDR / AMSI Evasion", "Kerberos Delegation", "Domain Trusts", "LAPS Abuse"],
   },
-  {
-    id: "ejpt",
-    name: "eJPTv2",
-    fullName: "eLearnSecurity Junior Penetration Tester",
-    issuer: "INE Security",
-    date: "Jun 2023",
-    status: "earned",
-    credentialId: "INE-99201",
-    badgeColor: "#3742fa",
-    description: "Foundational hands-on assessment covering host and network assessment, vulnerability analysis, and fundamental system exploitation.",
-    skillsCovered: ["Host Reconnaissance", "Network Protocols", "Metasploit", "Vulnerability Scanning", "Basic Exploitation"],
-  },
 ];

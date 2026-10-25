@@ -17,10 +17,10 @@ export default function CertificationsList({ initialCerts = fallbackCerts }: Cer
   useEffect(() => {
     // Fetch live certificates from Supabase API
     setLoading(true);
-    fetch('/api/certificates')
+    fetch(`/api/certificates?t=${Date.now()}`, { cache: 'no-store' })
       .then((res) => res.json())
       .then((data) => {
-        if (Array.isArray(data) && data.length > 0) {
+        if (Array.isArray(data)) {
           setCerts(data);
         }
       })

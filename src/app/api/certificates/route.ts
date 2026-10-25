@@ -1,27 +1,44 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase, mapDbToCert } from '@/lib/supabase';
+import { supabase, supabaseAdmin, mapDbToCert } from '@/lib/supabase';
 import { certifications as fallbackCerts } from '@/data/certifications';
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export async function GET() {
   try {
-    const { data, error } = await supabase
+    const client = supabaseAdmin || supabase;
+    const { data, error } = await client
       .from('certificates')
       .select('*')
       .order('display_order', { ascending: true });
 
     if (error || !data || data.length === 0) {
-      return NextResponse.json(fallbackCerts);
+      return NextResponse.json(fallbackCerts, {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        },
+      });
     }
 
-    return NextResponse.json(data.map(mapDbToCert));
+    return NextResponse.json(data.map(mapDbToCert), {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+      },
+    });
   } catch (err: any) {
     console.error('GET /api/certificates error:', err);
-    return NextResponse.json(fallbackCerts);
+    return NextResponse.json(fallbackCerts, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+      },
+    });
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
+    const client = supabaseAdmin || supabase;
     const body = await request.json();
 
     const {
@@ -48,7 +65,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get highest display order
-    const { data: latest } = await supabase
+    const { data: latest } = await client
       .from('certificates')
       .select('display_order')
       .order('display_order', { ascending: false })
@@ -77,7 +94,7 @@ export async function POST(request: NextRequest) {
       display_order: nextOrder,
     };
 
-    const { data, error } = await supabase
+    const { data, error } = await client
       .from('certificates')
       .insert([newRecord])
       .select()
