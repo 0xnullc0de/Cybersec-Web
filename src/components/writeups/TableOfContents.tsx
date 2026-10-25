@@ -100,6 +100,15 @@ export default function TableOfContents({ content }: TableOfContentsProps) {
     return () => observer.disconnect();
   }, [headings]);
 
+  // Keep active heading visible inside the TOC nav container
+  useEffect(() => {
+    if (!activeId) return;
+    const itemEl = document.getElementById(`toc-item-${activeId}`);
+    if (itemEl) {
+      itemEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }, [activeId]);
+
   if (headings.length === 0) return null;
 
   const scrollToHeading = (id: string) => {
@@ -169,9 +178,9 @@ export default function TableOfContents({ content }: TableOfContentsProps) {
       </div>
 
       {/* Desktop Sticky Sidebar */}
-      <aside className="hidden lg:block rounded-2xl bg-[#0a0f14] border border-[#1b2631] p-5 shadow-2xl space-y-4 no-print max-h-[calc(100vh-7.5rem)] flex flex-col">
+      <aside className="hidden lg:flex flex-col rounded-2xl bg-[#0a0f14] border border-[#1b2631] p-4 sm:p-5 shadow-2xl no-print max-h-[calc(100vh-7.5rem)] overflow-hidden">
         {/* Header Bar */}
-        <div className="flex items-center justify-between border-b border-[#17222c] pb-3 shrink-0">
+        <div className="flex items-center justify-between border-b border-[#17222c] pb-3 shrink-0 mb-3">
           <div className="flex items-center gap-2 font-mono text-xs text-white font-bold tracking-wider uppercase">
             <Compass className="w-4 h-4 text-[#00ff66]" />
             <span>NAVIGATION MATRIX</span>
@@ -182,13 +191,14 @@ export default function TableOfContents({ content }: TableOfContentsProps) {
           </span>
         </div>
 
-        {/* Headings List */}
-        <nav className="space-y-1 overflow-y-auto pr-1 scrollbar-thin flex-1 min-h-0">
+        {/* Headings List - Strictly contained with internal scroll */}
+        <nav className="space-y-1 overflow-y-auto pr-1.5 scrollbar-thin flex-1 min-h-0 py-1">
           {headings.map((item) => {
             const isActive = activeId === item.id;
             return (
               <button
                 key={item.id}
+                id={`toc-item-${item.id}`}
                 onClick={() => scrollToHeading(item.id)}
                 className={`w-full text-left font-mono transition-all rounded py-1.5 px-2 flex items-center gap-2 ${
                   item.level === 3 ? 'pl-5 text-[11px]' : 'text-xs'
@@ -208,7 +218,7 @@ export default function TableOfContents({ content }: TableOfContentsProps) {
         </nav>
 
         {/* Footer info badge */}
-        <div className="pt-3 border-t border-[#17222c] flex items-center justify-between text-[10px] font-mono text-gray-500 shrink-0">
+        <div className="pt-3 mt-3 border-t border-[#17222c] flex items-center justify-between text-[10px] font-mono text-gray-500 shrink-0">
           <span>{headings.length} SECTIONS</span>
           <span className="text-[#00ff66]">INTERACTIVE TOC</span>
         </div>
