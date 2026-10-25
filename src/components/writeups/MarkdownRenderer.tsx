@@ -82,7 +82,7 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
           return (
             <div
               key={index}
-              className={`my-6 rounded-xl overflow-hidden font-mono text-xs sm:text-sm shadow-2xl transition-all duration-300 ${
+              className={`my-6 rounded-xl overflow-hidden font-mono text-xs sm:text-sm shadow-2xl transition-all duration-300 terminal-block break-inside-avoid print:break-inside-avoid print:my-4 ${
                 isCopied
                   ? 'border-2 border-[#00ff66] shadow-[0_0_25px_rgba(0,255,102,0.3)] ring-1 ring-[#00ff66]/50 bg-[#04080a]'
                   : isExplicitCommand
@@ -127,7 +127,7 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
                 {/* Enhanced One-Click Copy Button with Terminal Feedback */}
                 <button
                   onClick={() => copyToClipboard(rawCode.trim(), blockId)}
-                  className={`px-3 py-1 rounded transition-all duration-200 flex items-center gap-1.5 text-[11px] font-mono font-bold ${
+                  className={`no-print print:hidden px-3 py-1 rounded transition-all duration-200 flex items-center gap-1.5 text-[11px] font-mono font-bold ${
                     isCopied
                       ? 'bg-[#00ff66] text-black shadow-[0_0_12px_rgba(0,255,102,0.8)]'
                       : 'bg-[#151f28] hover:bg-[#1c2936] text-gray-300 hover:text-white border border-[#22313f] hover:border-[#00ff66]/40'
@@ -201,7 +201,7 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
                 const imgUrl = imgMatch[2];
 
                 return (
-                  <div key={lIdx} className="my-6 rounded-xl border border-[#1b2631] bg-[#070b0e] p-2 sm:p-3 overflow-hidden shadow-xl">
+                  <div key={lIdx} className="my-6 rounded-xl border border-[#1b2631] bg-[#070b0e] p-2 sm:p-3 overflow-hidden shadow-xl break-inside-avoid print:break-inside-avoid print:my-4">
                     <div className="flex items-center gap-2 px-2 py-1.5 mb-2 border-b border-[#1b2631] text-xs font-mono text-gray-400">
                       <ImageIcon className="w-3.5 h-3.5 text-[#00ff66]" />
                       <span className="text-white font-medium">{altText}</span>
@@ -211,7 +211,7 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
                       src={imgUrl}
                       alt={altText}
                       loading="lazy"
-                      className="w-full h-auto rounded-lg border border-[#151f28] object-cover"
+                      className="w-full h-auto rounded-lg border border-[#151f28] object-contain print:max-h-[75vh]"
                     />
                   </div>
                 );
@@ -226,13 +226,13 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
                   <h2
                     key={lIdx}
                     id={headingId}
-                    className="font-mono text-xl sm:text-2xl font-bold text-white pt-6 pb-2 border-b border-[#1b2631] flex items-center gap-2 scroll-mt-28 group"
+                    className="font-mono text-xl sm:text-2xl font-bold text-white pt-6 pb-2 border-b border-[#1b2631] flex items-center gap-2 scroll-mt-28 group break-after-avoid print:break-after-avoid"
                   >
                     <span className="text-[#00ff66]">#</span>
                     <span>{headingText}</span>
                     <a
                       href={`#${headingId}`}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-500 hover:text-[#00ff66] text-sm ml-1"
+                      className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-500 hover:text-[#00ff66] text-sm ml-1 no-print print:hidden"
                       aria-label={`Link to ${headingText}`}
                     >
                       #
@@ -250,13 +250,13 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
                   <h3
                     key={lIdx}
                     id={headingId}
-                    className="font-mono text-lg font-semibold text-[#00ff66] pt-4 flex items-center gap-1.5 scroll-mt-28 group"
+                    className="font-mono text-lg font-semibold text-[#00ff66] pt-4 flex items-center gap-1.5 scroll-mt-28 group break-after-avoid print:break-after-avoid"
                   >
                     <span>&gt;&gt;</span>
                     <span>{headingText}</span>
                     <a
                       href={`#${headingId}`}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-500 hover:text-[#00ff66] text-xs ml-1"
+                      className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-500 hover:text-[#00ff66] text-xs ml-1 no-print print:hidden"
                       aria-label={`Link to ${headingText}`}
                     >
                       #

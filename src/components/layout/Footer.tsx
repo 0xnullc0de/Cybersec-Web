@@ -11,7 +11,7 @@ export default function Footer() {
   };
 
   return (
-    <footer className="border-t border-[#1b2631] bg-[#050708] relative overflow-hidden">
+    <footer className="border-t border-[#1b2631] bg-[#050708] relative overflow-hidden no-print print:hidden">
       {/* Subtle top green line accent */}
       <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-[#00ff66]/40 to-transparent" />
 

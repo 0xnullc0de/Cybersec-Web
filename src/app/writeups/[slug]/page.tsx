@@ -51,9 +51,9 @@ export default async function WriteupDetailPage({ params }: WriteupPageProps) {
     : (writeup.previewContent || '');
 
   return (
-    <article className="pt-24 pb-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <article className="pt-24 pb-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 print:p-0 print:m-0 print:max-w-none">
       {/* Back to writeups link */}
-      <div className="mb-6 no-print">
+      <div className="mb-6 no-print print:hidden">
         <Link
           href="/writeups"
           className="inline-flex items-center gap-2 text-xs font-mono text-gray-400 hover:text-[#00ff66] transition-colors"
@@ -174,7 +174,7 @@ export default async function WriteupDetailPage({ params }: WriteupPageProps) {
       {/* 2-Column Responsive Layout: Main Article & Sticky Table of Contents */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 relative">
         {/* Main Content Area */}
-        <div className="lg:col-span-8 xl:col-span-9 bg-[#080c10] border border-[#17222c] rounded-2xl p-6 sm:p-10 shadow-xl print-clean min-w-0">
+        <div className="lg:col-span-8 xl:col-span-9 print:col-span-12 print:w-full bg-[#080c10] border border-[#17222c] rounded-2xl p-6 sm:p-10 shadow-xl print-clean min-w-0 print:p-4 print:border-none">
           {retiredNow ? (
             /* RETIRED MACHINE: Full unhindered content */
             <div className="space-y-8">
@@ -204,15 +204,15 @@ export default async function WriteupDetailPage({ params }: WriteupPageProps) {
           )}
         </div>
 
-        {/* Right Sticky Sidebar: Navigation & Table of Contents */}
-        <div className="lg:col-span-4 xl:col-span-3 lg:sticky lg:top-24 self-start">
+        {/* Right Sticky Sidebar: Navigation & Table of Contents (Hidden during print/PDF) */}
+        <div className="lg:col-span-4 xl:col-span-3 lg:sticky lg:top-24 self-start no-print print:hidden">
           <TableOfContents content={retiredNow ? writeup.content : activeSafePreview} />
         </div>
       </div>
 
 
       {/* Writeup Footer Navigation */}
-      <div className="mt-12 pt-8 border-t border-[#1b2631] flex items-center justify-between no-print">
+      <div className="mt-12 pt-8 border-t border-[#1b2631] flex items-center justify-between no-print print:hidden">
         <Link
           href="/writeups"
           className="font-mono text-xs text-gray-400 hover:text-[#00ff66] transition-colors flex items-center gap-2"

@@ -72,7 +72,7 @@ ${writeup.content}
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-2.5 no-print">
+    <div className="flex flex-wrap items-center gap-2.5 no-print print:hidden">
       {/* Download Markdown */}
       <button
         onClick={handleDownloadMarkdown}
