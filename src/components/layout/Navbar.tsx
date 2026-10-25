@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Terminal, Shield, FileText, Award, BookOpen, User, Sun, Moon, Menu, X, ExternalLink } from 'lucide-react';
+import { Terminal, Shield, FileText, Award, BookOpen, User, Sun, Moon, Menu, X, ExternalLink, Wrench } from 'lucide-react';
 import { siteConfig } from '@/data/siteConfig';
 
 export default function Navbar() {
@@ -50,6 +50,7 @@ export default function Navbar() {
 
   const navLinks = [
     { name: 'Writeups', href: '/writeups', icon: FileText },
+    { name: 'Tools', href: '/tools', icon: Wrench },
     { name: 'Certifications', href: '/about#certifications', icon: Award },
     { name: 'TIL Notes', href: '/til', icon: BookOpen },
     { name: 'About / Whoami', href: '/about', icon: User },

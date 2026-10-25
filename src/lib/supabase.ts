@@ -1,8 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
-import { Writeup, Certification, TilNote } from '@/types';
+import { Writeup, Certification, TilNote, Tool } from '@/types';
 import { writeups as fallbackWriteups } from '@/data/writeups';
 import { certifications as fallbackCerts } from '@/data/certifications';
 import { tilNotes as fallbackTilNotes } from '@/data/til';
+import { fallbackTools } from '@/data/tools';
 
 const DEFAULT_SUPABASE_URL = 'https://bhtzmnhmdlmsuxivwgua.supabase.co';
 const DEFAULT_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJodHptbmhtZGxtc3V4aXZ3Z3VhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg0MDIwNzEsImV4cCI6MjEwMzk3ODA3MX0.ub5aHUHbTpLc6tvzcFVuCp8CE6JpOqXi9NBCDpIXKbg';
@@ -187,5 +188,42 @@ export async function getTilNotes(): Promise<TilNote[]> {
   } catch (err) {
     console.error('Error querying til_notes from Supabase:', err);
     return fallbackTilNotes;
+  }
+}
+
+// Map database row to Tool type
+export function mapDbToTool(row: any): Tool {
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description || '',
+    language: row.language || 'Python',
+    category: row.category || 'Utility',
+    tags: row.tags || [],
+    githubUrl: row.github_url || undefined,
+    relatedWriteupSlug: row.related_writeup_slug || undefined,
+    displayOrder: row.display_order ?? 0,
+    createdAt: row.created_at || new Date().toISOString(),
+  };
+}
+
+/**
+ * Fetch all security tools and scripts from Supabase.
+ */
+export async function getTools(): Promise<Tool[]> {
+  try {
+    const { data, error } = await supabase
+      .from('tools')
+      .select('*')
+      .order('display_order', { ascending: true });
+
+    if (error || !data || data.length === 0) {
+      return fallbackTools;
+    }
+
+    return data.map(mapDbToTool);
+  } catch (err) {
+    console.error('Error querying tools from Supabase:', err);
+    return fallbackTools;
   }
 }

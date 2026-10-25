@@ -58,6 +58,29 @@ export interface TilNote {
   imageUrls?: string[];
 }
 
+export type ToolCategory =
+  | 'AD Exploitation'
+  | 'Network Pivoting'
+  | 'Credential Access'
+  | 'Automation'
+  | 'Recon'
+  | 'Web Exploitation'
+  | 'Post-Exploitation'
+  | 'Utility';
+
+export interface Tool {
+  id: string;
+  name: string;
+  description: string;
+  language: string;
+  category: ToolCategory;
+  tags: string[];
+  githubUrl?: string;
+  relatedWriteupSlug?: string;
+  displayOrder: number;
+  createdAt: string;
+}
+
 export interface SiteConfig {
   name: string;
   handle: string;
