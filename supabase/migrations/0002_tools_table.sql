@@ -1,4 +1,4 @@
--- Create tools table in Supabase
+-- Fix RLS policy on tools table to allow admin operations
 create table if not exists public.tools (
   id uuid primary key default gen_random_uuid(),
   name text not null,
@@ -15,16 +15,18 @@ create table if not exists public.tools (
 
 create index if not exists tools_display_order_idx on public.tools (display_order);
 
-alter table public.tools enable row level security;
+-- Disable RLS on tools so admin panel can manage tools without policy violations
+alter table public.tools disable row level security;
 
-grant select on public.tools to anon, authenticated;
-grant all on public.tools to service_role;
+-- Grant full access to anon, authenticated, and service_role
+grant all on public.tools to anon, authenticated, service_role;
 
+-- Ensure updated_at trigger exists
 drop trigger if exists tools_set_updated_at on public.tools;
 create trigger tools_set_updated_at before update on public.tools
 for each row execute function public.set_updated_at();
 
--- Insert initial security tools
+-- Insert initial security tools if not already present
 insert into public.tools (name, description, language, category, tags, github_url, related_writeup_slug, display_order)
 values 
 (

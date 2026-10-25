@@ -169,9 +169,9 @@ export default function TableOfContents({ content }: TableOfContentsProps) {
       </div>
 
       {/* Desktop Sticky Sidebar */}
-      <aside className="hidden lg:block sticky top-24 rounded-2xl bg-[#0a0f14] border border-[#1b2631] p-5 shadow-2xl space-y-4 no-print">
+      <aside className="hidden lg:block rounded-2xl bg-[#0a0f14] border border-[#1b2631] p-5 shadow-2xl space-y-4 no-print max-h-[calc(100vh-7.5rem)] flex flex-col">
         {/* Header Bar */}
-        <div className="flex items-center justify-between border-b border-[#17222c] pb-3">
+        <div className="flex items-center justify-between border-b border-[#17222c] pb-3 shrink-0">
           <div className="flex items-center gap-2 font-mono text-xs text-white font-bold tracking-wider uppercase">
             <Compass className="w-4 h-4 text-[#00ff66]" />
             <span>NAVIGATION MATRIX</span>
@@ -183,7 +183,7 @@ export default function TableOfContents({ content }: TableOfContentsProps) {
         </div>
 
         {/* Headings List */}
-        <nav className="space-y-1 max-h-[calc(100vh-14rem)] overflow-y-auto pr-1 scrollbar-thin">
+        <nav className="space-y-1 overflow-y-auto pr-1 scrollbar-thin flex-1 min-h-0">
           {headings.map((item) => {
             const isActive = activeId === item.id;
             return (
@@ -208,7 +208,7 @@ export default function TableOfContents({ content }: TableOfContentsProps) {
         </nav>
 
         {/* Footer info badge */}
-        <div className="pt-3 border-t border-[#17222c] flex items-center justify-between text-[10px] font-mono text-gray-500">
+        <div className="pt-3 border-t border-[#17222c] flex items-center justify-between text-[10px] font-mono text-gray-500 shrink-0">
           <span>{headings.length} SECTIONS</span>
           <span className="text-[#00ff66]">INTERACTIVE TOC</span>
         </div>

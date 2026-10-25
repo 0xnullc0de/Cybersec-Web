@@ -172,9 +172,9 @@ export default async function WriteupDetailPage({ params }: WriteupPageProps) {
       </header>
 
       {/* 2-Column Responsive Layout: Main Article & Sticky Table of Contents */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 relative">
         {/* Main Content Area */}
-        <div className="lg:col-span-8 xl:col-span-9 bg-[#080c10] border border-[#17222c] rounded-2xl p-6 sm:p-10 shadow-xl print-clean">
+        <div className="lg:col-span-8 xl:col-span-9 bg-[#080c10] border border-[#17222c] rounded-2xl p-6 sm:p-10 shadow-xl print-clean min-w-0">
           {retiredNow ? (
             /* RETIRED MACHINE: Full unhindered content */
             <div className="space-y-8">
@@ -205,7 +205,7 @@ export default async function WriteupDetailPage({ params }: WriteupPageProps) {
         </div>
 
         {/* Right Sticky Sidebar: Navigation & Table of Contents */}
-        <div className="lg:col-span-4 xl:col-span-3">
+        <div className="lg:col-span-4 xl:col-span-3 lg:sticky lg:top-24 self-start">
           <TableOfContents content={retiredNow ? writeup.content : activeSafePreview} />
         </div>
       </div>
