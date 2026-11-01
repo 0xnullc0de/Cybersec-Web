@@ -21,6 +21,7 @@ interface RetirementGateProps {
   machineTitle: string;
   retirementDate: string | null;
   platform: string;
+  onUnlock?: (fullContent: string, data?: any) => void;
 }
 
 const MAX_ATTEMPTS = 5;
@@ -31,6 +32,7 @@ export default function RetirementGate({
   machineTitle,
   retirementDate,
   platform,
+  onUnlock,
 }: RetirementGateProps) {
   const [input, setInput] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -112,7 +114,12 @@ export default function RetirementGate({
         setUnlockedContent(data.fullContent);
         setUnlockedReason(data.unlockedReason);
         setFailed(false);
-        setTimeout(() => setUnlocked(true), 800);
+        setTimeout(() => {
+          setUnlocked(true);
+          if (onUnlock) {
+            onUnlock(data.fullContent, data);
+          }
+        }, 800);
       } else {
         const remaining = Math.max(0, MAX_ATTEMPTS - (attempts + 1));
         pushLine(`> AUTH: Incorrect passphrase ✗ [${remaining} attempts remaining]`);

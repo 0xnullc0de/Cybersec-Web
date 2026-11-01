@@ -94,10 +94,27 @@ export const COMPREHENSIVE_MITRE_MAP: Record<string, MitreTTP> = {
 
   // Discovery
   bloodhound: { id: 'T1087.002', name: 'Account Discovery: Domain Account / Graph', tactic: 'Discovery', url: 'https://attack.mitre.org/techniques/T1087/002/' },
+  rusthound: { id: 'T1087.002', name: 'Account Discovery: RustHound Domain Graph', tactic: 'Discovery', url: 'https://attack.mitre.org/techniques/T1087/002/' },
   rpc: { id: 'T1087.002', name: 'Account Discovery: RPC User Enumeration', tactic: 'Discovery', url: 'https://attack.mitre.org/techniques/T1087/002/' },
   nmap: { id: 'T1046', name: 'Network Service Discovery: Port Scanning', tactic: 'Discovery', url: 'https://attack.mitre.org/techniques/T1046/' },
   recon: { id: 'T1046', name: 'Network Service Discovery: Active Recon', tactic: 'Discovery', url: 'https://attack.mitre.org/techniques/T1046/' },
   activedirectory: { id: 'T1069.002', name: 'Permission Groups Discovery: Domain Groups', tactic: 'Discovery', url: 'https://attack.mitre.org/techniques/T1069/002/' },
+
+  // AD CS & Certificates
+  adcs: { id: 'T1649', name: 'Steal/Forge Auth Certificates: AD CS Abuse', tactic: 'Credential Access', url: 'https://attack.mitre.org/techniques/T1649/' },
+  esc1: { id: 'T1649', name: 'AD CS Certificate Template Misconfiguration (ESC1)', tactic: 'Privilege Escalation', url: 'https://attack.mitre.org/techniques/T1649/' },
+  esc4: { id: 'T1649', name: 'AD CS Vulnerable Access Control on Template (ESC4)', tactic: 'Privilege Escalation', url: 'https://attack.mitre.org/techniques/T1649/' },
+  esc13: { id: 'T1649', name: 'AD CS Issuance Policy to Group Mapping (ESC13)', tactic: 'Privilege Escalation', url: 'https://attack.mitre.org/techniques/T1649/' },
+  certipy: { id: 'T1649', name: 'Steal/Forge Auth Certificates: Certipy Extraction', tactic: 'Credential Access', url: 'https://attack.mitre.org/techniques/T1649/' },
+
+  // Delegation, Kerberos & Trusts
+  rbcd: { id: 'T1558', name: 'Steal/Forge Kerberos: Resource-Based Constrained Delegation', tactic: 'Privilege Escalation', url: 'https://attack.mitre.org/techniques/T1558/' },
+  delegation: { id: 'T1558', name: 'Steal or Forge Kerberos: Delegation Abuse', tactic: 'Privilege Escalation', url: 'https://attack.mitre.org/techniques/T1558/' },
+  gmsa: { id: 'T1558', name: 'Subvert Trust Controls: Group Managed Service Accounts (gMSA)', tactic: 'Credential Access', url: 'https://attack.mitre.org/techniques/T1558/' },
+  crossforest: { id: 'T1484', name: 'Domain Trust Discovery: Cross-Forest Kerberos Hop', tactic: 'Lateral Movement', url: 'https://attack.mitre.org/techniques/T1484/' },
+  trust: { id: 'T1484', name: 'Domain Trust Discovery & Exploitation', tactic: 'Lateral Movement', url: 'https://attack.mitre.org/techniques/T1484/' },
+  jea: { id: 'T1548', name: 'Abuse Elevation Control: Just Enough Administration (JEA)', tactic: 'Privilege Escalation', url: 'https://attack.mitre.org/techniques/T1548/' },
+  mssql: { id: 'T1505.001', name: 'Server Software Component: MSSQL xp_cmdshell', tactic: 'Execution', url: 'https://attack.mitre.org/techniques/T1505/001/' },
 
   // Persistence
   forcechangepassword: { id: 'T1098', name: 'Account Manipulation: ForceChangePassword ACE', tactic: 'Persistence', url: 'https://attack.mitre.org/techniques/T1098/' },
@@ -210,6 +227,17 @@ export default function AttackFlowAndMitre({ writeup }: AttackFlowAndMitreProps)
         list.push(match);
       }
     });
+
+    // Also scan content for technique keywords
+    const contentLower = (writeup.content || '').toLowerCase();
+    for (const [key, ttp] of Object.entries(COMPREHENSIVE_MITRE_MAP)) {
+      if (seen.has(ttp.id)) continue;
+      if (key.length >= 3 && contentLower.includes(key)) {
+        seen.add(ttp.id);
+        list.push(ttp);
+        if (list.length >= 10) break;
+      }
+    }
 
     // If fewer than 2 matched, add standard baseline reconnaissance & access techniques
     if (list.length < 2) {

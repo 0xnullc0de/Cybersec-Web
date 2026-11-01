@@ -217,6 +217,30 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
                 );
               }
 
+              // H1 / H2 Header with Anchor ID for Table of Contents
+              if (trimmed.startsWith('# ') && !trimmed.startsWith('## ')) {
+                const headingText = trimmed.replace('# ', '').trim();
+                const headingId = slugifyHeading(headingText);
+
+                return (
+                  <h2
+                    key={lIdx}
+                    id={headingId}
+                    className="font-mono text-xl sm:text-2xl font-bold text-white pt-6 pb-2 border-b border-[#1b2631] flex items-center gap-2 scroll-mt-28 group break-after-avoid print:break-after-avoid"
+                  >
+                    <span className="text-[#00ff66]">#</span>
+                    <span>{headingText}</span>
+                    <a
+                      href={`#${headingId}`}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-500 hover:text-[#00ff66] text-sm ml-1 no-print print:hidden"
+                      aria-label={`Link to ${headingText}`}
+                    >
+                      #
+                    </a>
+                  </h2>
+                );
+              }
+
               // H2 Header with Anchor ID for Table of Contents
               if (trimmed.startsWith('## ')) {
                 const headingText = trimmed.replace('## ', '').trim();

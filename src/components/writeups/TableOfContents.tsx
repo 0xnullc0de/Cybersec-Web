@@ -42,7 +42,16 @@ export default function TableOfContents({ content }: TableOfContentsProps) {
       }
       if (insideCodeFence) continue;
 
-      if (trimmed.startsWith('## ')) {
+      if (trimmed.startsWith('# ') && !trimmed.startsWith('## ')) {
+        const text = trimmed.replace('# ', '').trim();
+        if (text) {
+          items.push({
+            id: slugifyHeading(text),
+            text,
+            level: 2,
+          });
+        }
+      } else if (trimmed.startsWith('## ')) {
         const text = trimmed.replace('## ', '').trim();
         if (text) {
           items.push({

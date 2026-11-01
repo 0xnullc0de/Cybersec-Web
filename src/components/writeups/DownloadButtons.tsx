@@ -7,14 +7,17 @@ import { siteConfig } from '@/data/siteConfig';
 
 interface DownloadButtonsProps {
   writeup: Writeup;
+  isUnlocked?: boolean;
 }
 
-export default function DownloadButtons({ writeup }: DownloadButtonsProps) {
+export default function DownloadButtons({ writeup, isUnlocked = false }: DownloadButtonsProps) {
   const [downloadedMd, setDownloadedMd] = useState(false);
 
   const retiredNow = writeup.isRetired || Boolean(writeup.retirementDate && new Date(writeup.retirementDate).getTime() <= Date.now());
-  // If the machine is active, downloading writeups is completely forbidden
-  if (!retiredNow) {
+  const canDownload = retiredNow || isUnlocked;
+
+  // If the machine is active and not unlocked, downloading writeups is forbidden
+  if (!canDownload) {
     return (
       <div 
         className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 font-mono text-xs font-semibold select-none shadow-sm"
@@ -27,7 +30,7 @@ export default function DownloadButtons({ writeup }: DownloadButtonsProps) {
   }
 
   const handleDownloadMarkdown = () => {
-    if (!retiredNow) return;
+    if (!canDownload) return;
 
     const markdownContent = `---
 title: "${writeup.title}"
@@ -66,7 +69,7 @@ ${writeup.content}
   };
 
   const handleDownloadPdf = () => {
-    if (!retiredNow) return;
+    if (!canDownload) return;
     // Triggers browser print dialog in full cyberpunk dark mode
     window.print();
   };
