@@ -138,9 +138,13 @@ export async function refineWriteupContent(rawMarkdown: string, customApiKey?: s
     );
   }
 
-  // Model choice: gemini-2.5-flash or gemini-1.5-flash (free tier)
-  const model = 'gemini-1.5-flash';
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+  // Active Gemini Flash models (with automatic fallback)
+  const candidateModels = [
+    'gemini-3.1-flash-lite',
+    'gemini-3.5-flash-lite',
+    'gemini-3.8-flash',
+    'gemini-flash-latest',
+  ];
 
   const payload = {
     contents: [
@@ -158,24 +162,31 @@ export async function refineWriteupContent(rawMarkdown: string, customApiKey?: s
     },
   };
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
+  let lastError: string = '';
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Gemini API error (${response.status}): ${errorText}`);
+  for (const model of candidateModels) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const refinedText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (refinedText) return refinedText;
+      } else {
+        const errText = await response.text();
+        lastError = `Model ${model} returned (${response.status}): ${errText}`;
+      }
+    } catch (e: any) {
+      lastError = `Model ${model} request error: ${e.message}`;
+    }
   }
 
-  const data = await response.json();
-  const refinedText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!refinedText) {
-    throw new Error('No content returned from Gemini API.');
-  }
-
-  return refinedText;
+  throw new Error(`Gemini refinement failed across available models. Details: ${lastError}`);
 }
 
 async function main() {
