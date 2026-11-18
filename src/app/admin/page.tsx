@@ -44,6 +44,7 @@ export default function AdminPage() {
   const [aiRefining, setAiRefining] = useState(false);
   const [aiComparison, setAiComparison] = useState<{ raw: string; refined: string } | null>(null);
   const [showAiComparisonModal, setShowAiComparisonModal] = useState(false);
+  const [adminGeminiKey, setAdminGeminiKey] = useState<string>('');
   const [importConfig, setImportConfig] = useState({
     title: '',
     isProLab: false,
@@ -124,6 +125,10 @@ export default function AdminPage() {
     if (saved) {
       setAdminKey(saved);
       checkAuth(saved);
+    }
+    const savedGemini = localStorage.getItem('gemini_api_key');
+    if (savedGemini) {
+      setAdminGeminiKey(savedGemini);
     }
   }, []);
 
@@ -308,7 +313,10 @@ export default function AdminPage() {
           'Content-Type': 'application/json',
           'x-admin-key': adminKey,
         },
-        body: JSON.stringify({ pageId }),
+        body: JSON.stringify({ 
+          pageId,
+          geminiApiKey: adminGeminiKey || undefined,
+        }),
       });
       const data = await res.json();
       if (res.ok && data.success) {
@@ -2275,44 +2283,69 @@ export default function AdminPage() {
                 </div>
 
                 {/* AI Refiner Integration */}
-                <div className="p-4 rounded-xl bg-[#09110d] border border-[#00ff66]/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-[0_0_15px_rgba(0,255,102,0.08)]">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <Sparkles className="w-4 h-4 text-[#00ff66]" />
-                      <span className="font-mono text-xs font-bold text-white">AI WRITEUP REFINER</span>
-                      {importConfig.content && (
-                        <span className="text-[10px] font-mono px-2 py-0.5 rounded font-bold bg-[#00ff66]/15 text-[#00ff66] border border-[#00ff66]/30 flex items-center gap-1">
-                          <Check className="w-3 h-3" /> REFINED NOTES ATTACHED
-                        </span>
-                      )}
+                <div className="p-4 rounded-xl bg-[#09110d] border border-[#00ff66]/40 flex flex-col gap-3 shadow-[0_0_15px_rgba(0,255,102,0.08)]">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-[#00ff66]" />
+                        <span className="font-mono text-xs font-bold text-white">AI WRITEUP REFINER</span>
+                        {importConfig.content ? (
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded font-bold bg-[#00ff66]/15 text-[#00ff66] border border-[#00ff66]/30 flex items-center gap-1">
+                            <Check className="w-3 h-3" /> REFINED NOTES ATTACHED
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                            FREE GEMINI FLASH
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] font-mono text-gray-400 mt-1">
+                        Formats raw notes, unifies commands &amp; outputs, and generates clean Red Team documentation.
+                      </p>
                     </div>
-                    <p className="text-[11px] font-mono text-gray-400 mt-1">
-                      Formats raw notes, unifies commands &amp; outputs, and generates clean Red Team documentation.
-                    </p>
+
+                    <button
+                      type="button"
+                      disabled={aiRefining}
+                      onClick={() => handleTriggerAiRefine(selectedNotionPage.id)}
+                      className="px-4 py-2 bg-[#00ff66] hover:bg-[#00ff66]/90 text-black text-xs font-mono font-bold rounded-lg transition-all flex items-center justify-center gap-2 shrink-0 cursor-pointer shadow-[0_0_15px_rgba(0,255,102,0.2)]"
+                    >
+                      {aiRefining ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          REFINING WITH AI...
+                        </>
+                      ) : importConfig.content ? (
+                        <>
+                          <Eye className="w-3.5 h-3.5" />
+                          VIEW COMPARISON / EDIT
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-3.5 h-3.5" />
+                          ⚡ REFINE &amp; COMPARE
+                        </>
+                      )}
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    disabled={aiRefining}
-                    onClick={() => handleTriggerAiRefine(selectedNotionPage.id)}
-                    className="px-4 py-2 bg-[#00ff66]/10 hover:bg-[#00ff66]/20 border border-[#00ff66]/40 text-[#00ff66] text-xs font-mono font-bold rounded-lg transition-all flex items-center justify-center gap-2 shrink-0 cursor-pointer"
-                  >
-                    {aiRefining ? (
-                      <>
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        REFINING WITH AI...
-                      </>
-                    ) : importConfig.content ? (
-                      <>
-                        <Eye className="w-3.5 h-3.5" />
-                        VIEW COMPARISON / EDIT
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="w-3.5 h-3.5" />
-                        ⚡ REFINE &amp; COMPARE
-                      </>
-                    )}
-                  </button>
+
+                  {/* Direct In-UI API Key Field */}
+                  <div className="pt-2.5 border-t border-[#1b2631]/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <span className="text-[10px] font-mono text-gray-400 flex items-center gap-1 shrink-0">
+                      <Key className="w-3 h-3 text-[#00ff66]" /> GEMINI KEY:
+                    </span>
+                    <input
+                      type="password"
+                      value={adminGeminiKey}
+                      onChange={(e) => {
+                        const val = e.target.value.trim();
+                        setAdminGeminiKey(val);
+                        if (val) localStorage.setItem('gemini_api_key', val);
+                      }}
+                      placeholder="Gemini API Key"
+                      className="flex-1 bg-[#040608] border border-[#1b2631] focus:border-[#00ff66]/60 rounded px-2.5 py-1 text-xs font-mono text-[#00ff66] focus:outline-none"
+                    />
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">

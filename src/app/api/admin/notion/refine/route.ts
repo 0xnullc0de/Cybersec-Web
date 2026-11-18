@@ -18,7 +18,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { pageId } = body;
+    const { pageId, geminiApiKey } = body;
 
     if (!pageId) {
       return NextResponse.json({ error: 'pageId is required' }, { status: 400 });
@@ -35,7 +35,7 @@ export async function POST(request: Request) {
     const rawMarkdown = await parseNotionBlocksToRaw(notion, pageId);
 
     // 2. Refine using Gemini
-    const refinedMarkdown = await refineWriteupContent(rawMarkdown);
+    const refinedMarkdown = await refineWriteupContent(rawMarkdown, geminiApiKey);
 
     return NextResponse.json({
       success: true,
