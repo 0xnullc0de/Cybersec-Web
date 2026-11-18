@@ -2,24 +2,51 @@ import { Client } from '@notionhq/client';
 import fs from 'fs';
 import path from 'path';
 
-function loadEnv() {
-  const envPath = path.join(process.cwd(), '.env.local');
-  if (fs.existsSync(envPath)) {
-    const lines = fs.readFileSync(envPath, 'utf8').split('\n');
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith('#')) continue;
-      const idx = trimmed.indexOf('=');
-      if (idx !== -1) {
-        const k = trimmed.slice(0, idx).trim();
-        const v = trimmed.slice(idx + 1).trim();
-        if (!process.env[k]) process.env[k] = v;
+export function getGeminiApiKey(): string | null {
+  if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim()) {
+    return process.env.GEMINI_API_KEY.trim();
+  }
+  if (process.env.GOOGLE_API_KEY && process.env.GOOGLE_API_KEY.trim()) {
+    return process.env.GOOGLE_API_KEY.trim();
+  }
+
+  // Check multiple likely paths for .env.local
+  const candidatePaths = [
+    path.join(process.cwd(), '.env.local'),
+    '/home/d4rkc0de/Cyber/Cybersec-Web/.env.local',
+  ];
+
+  for (const envPath of candidatePaths) {
+    try {
+      if (fs.existsSync(envPath)) {
+        const content = fs.readFileSync(envPath, 'utf8');
+        const match = content.match(/^(?:export\s+)?GEMINI_API_KEY\s*=\s*['"]?([^'"\r\n]+)['"]?/m);
+        if (match && match[1]?.trim()) {
+          process.env.GEMINI_API_KEY = match[1].trim();
+          return match[1].trim();
+        }
+      }
+    } catch (e) {}
+  }
+
+  // Also check ~/.zshrc fallback
+  try {
+    const home = process.env.HOME || '/home/d4rkc0de';
+    const zshrcPath = path.join(home, '.zshrc');
+    if (fs.existsSync(zshrcPath)) {
+      const content = fs.readFileSync(zshrcPath, 'utf8');
+      const match = content.match(/^(?:export\s+)?GEMINI_API_KEY\s*=\s*['"]?([^'"\r\n]+)['"]?/m);
+      if (match && match[1]?.trim()) {
+        process.env.GEMINI_API_KEY = match[1].trim();
+        return match[1].trim();
       }
     }
-  }
+  } catch (e) {}
+
+  return null;
 }
 
-loadEnv();
+getGeminiApiKey();
 
 function getPlainText(richTextArray: any[]): string {
   if (!Array.isArray(richTextArray)) return '';
@@ -130,7 +157,7 @@ export async function parseNotionBlocksToRaw(notion: Client, blockId: string): P
  * Refines raw markdown notes using Gemini Flash (with resilient model fallbacks).
  */
 export async function refineWriteupContent(rawMarkdown: string, customApiKey?: string): Promise<string> {
-  const apiKey = customApiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+  const apiKey = customApiKey || getGeminiApiKey();
   if (!apiKey) {
     throw new Error(
       'GEMINI_API_KEY is not set. Please add GEMINI_API_KEY=your_key to .env.local'
