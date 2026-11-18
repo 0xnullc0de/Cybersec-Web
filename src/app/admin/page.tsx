@@ -5,7 +5,7 @@ import {
   Shield, Key, Lock, Unlock, Plus, RefreshCw, Check, Copy, 
   Trash2, ExternalLink, Terminal, AlertTriangle, FileText, 
   Award, Eye, CheckCircle2, Server, Download, Globe, Sparkles, Folder, Edit3,
-  BookOpen, Image as ImageIcon, Upload, X, Wrench, Code2
+  BookOpen, Image as ImageIcon, Upload, X, Wrench, Code2, Loader2
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -41,6 +41,9 @@ export default function AdminPage() {
 
   // Import Modal state
   const [selectedNotionPage, setSelectedNotionPage] = useState<any | null>(null);
+  const [aiRefining, setAiRefining] = useState(false);
+  const [aiComparison, setAiComparison] = useState<{ raw: string; refined: string } | null>(null);
+  const [showAiComparisonModal, setShowAiComparisonModal] = useState(false);
   const [importConfig, setImportConfig] = useState({
     title: '',
     isProLab: false,
@@ -52,6 +55,7 @@ export default function AdminPage() {
     initialAccessVector: '',
     privEscVector: '',
     unlockPassword: '',
+    content: '',
   });
 
   // Certificate form state
@@ -270,6 +274,7 @@ export default function AdminPage() {
             initialAccessVector: importConfig.initialAccessVector,
             privEscVector: importConfig.privEscVector,
             unlockPassword: importConfig.unlockPassword,
+            content: importConfig.content || undefined,
           },
         }),
       });
@@ -290,6 +295,36 @@ export default function AdminPage() {
       setMessage({ type: 'error', text: e.message });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleTriggerAiRefine = async (pageId: string) => {
+    setAiRefining(true);
+    setMessage(null);
+    try {
+      const res = await fetch('/api/admin/notion/refine', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-key': adminKey,
+        },
+        body: JSON.stringify({ pageId }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setAiComparison({
+          raw: data.rawMarkdown,
+          refined: data.refinedMarkdown,
+        });
+        setImportConfig((prev) => ({ ...prev, content: data.refinedMarkdown }));
+        setShowAiComparisonModal(true);
+      } else {
+        setMessage({ type: 'error', text: data.error || 'Failed to refine with AI' });
+      }
+    } catch (e: any) {
+      setMessage({ type: 'error', text: e.message });
+    } finally {
+      setAiRefining(false);
     }
   };
 
@@ -2146,6 +2181,7 @@ export default function AdminPage() {
                                 initialAccessVector: '',
                                 privEscVector: '',
                                 unlockPassword: handleGeneratePassword(p.title, false),
+                                content: '',
                               });
                             }}
                             className="px-4 py-2 bg-[#00ff66]/10 hover:bg-[#00ff66]/20 border border-[#00ff66]/30 text-[#00ff66] text-xs font-mono font-bold rounded-lg transition-all flex items-center gap-1.5"
@@ -2236,6 +2272,47 @@ export default function AdminPage() {
                     onChange={(e) => setImportConfig({ ...importConfig, title: e.target.value })}
                     className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-2 text-sm font-mono text-white focus:border-[#00ff66] focus:outline-none"
                   />
+                </div>
+
+                {/* AI Refiner Integration */}
+                <div className="p-4 rounded-xl bg-[#09110d] border border-[#00ff66]/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-[0_0_15px_rgba(0,255,102,0.08)]">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-[#00ff66]" />
+                      <span className="font-mono text-xs font-bold text-white">AI WRITEUP REFINER</span>
+                      {importConfig.content && (
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded font-bold bg-[#00ff66]/15 text-[#00ff66] border border-[#00ff66]/30 flex items-center gap-1">
+                          <Check className="w-3 h-3" /> REFINED NOTES ATTACHED
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] font-mono text-gray-400 mt-1">
+                      Formats raw notes, unifies commands &amp; outputs, and generates clean Red Team documentation.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={aiRefining}
+                    onClick={() => handleTriggerAiRefine(selectedNotionPage.id)}
+                    className="px-4 py-2 bg-[#00ff66]/10 hover:bg-[#00ff66]/20 border border-[#00ff66]/40 text-[#00ff66] text-xs font-mono font-bold rounded-lg transition-all flex items-center justify-center gap-2 shrink-0 cursor-pointer"
+                  >
+                    {aiRefining ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        REFINING WITH AI...
+                      </>
+                    ) : importConfig.content ? (
+                      <>
+                        <Eye className="w-3.5 h-3.5" />
+                        VIEW COMPARISON / EDIT
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-3.5 h-3.5" />
+                        ⚡ REFINE &amp; COMPARE
+                      </>
+                    )}
+                  </button>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -2381,6 +2458,129 @@ export default function AdminPage() {
                   {loading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
                   IMPORT &amp; REHOST SCREENSHOTS
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* MODAL: AI WRITEUP REFINER SIDE-BY-SIDE COMPARISON                        */}
+        {/* ========================================================================= */}
+        {showAiComparisonModal && aiComparison && (
+          <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[60] flex items-center justify-center p-2 sm:p-6">
+            <div className="w-full max-w-7xl h-[92vh] flex flex-col bg-[#070b0e] border border-[#00ff66]/50 rounded-2xl shadow-[0_0_50px_rgba(0,255,102,0.15)] overflow-hidden">
+              {/* Top Bar */}
+              <div className="px-6 py-4 bg-[#0a1015] border-b border-[#1b2631] flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-[#00ff66]/10 border border-[#00ff66]/30 text-[#00ff66]">
+                    <Sparkles className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-mono text-base font-bold text-white tracking-wide">
+                        AI WRITEUP REFINER // SIDE-BY-SIDE COMPARISON
+                      </h3>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded font-bold bg-[#00ff66]/10 text-[#00ff66] border border-[#00ff66]/30">
+                        GEMINI FLASH
+                      </span>
+                    </div>
+                    <p className="text-xs font-mono text-gray-400 mt-0.5">
+                      Target: <span className="text-white font-bold">{importConfig.title}</span> • Review changes, edit the refined output on the right, or accept to attach.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setShowAiComparisonModal(false)}
+                  className="px-3 py-1.5 rounded-lg bg-[#111923] hover:bg-[#1a2533] border border-[#22313f] text-gray-400 hover:text-white transition-all font-mono text-xs font-bold"
+                >
+                  ✕ CLOSE
+                </button>
+              </div>
+
+              {/* Side-by-Side Comparison Body */}
+              <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-[#1b2631] overflow-hidden">
+                {/* Left Panel: Raw Notion Notes */}
+                <div className="flex flex-col h-full bg-[#050709] overflow-hidden">
+                  <div className="px-4 py-2.5 bg-[#090d12] border-b border-[#1b2631] flex items-center justify-between shrink-0">
+                    <span className="text-xs font-mono font-bold text-gray-400 flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-gray-400" />
+                      ORIGINAL RAW NOTION NOTES (READ-ONLY)
+                    </span>
+                    <span className="text-[11px] font-mono text-gray-500">
+                      {aiComparison.raw.length} characters
+                    </span>
+                  </div>
+                  <div className="flex-1 p-4 overflow-y-auto font-mono text-xs leading-relaxed text-gray-300 whitespace-pre-wrap select-text selection:bg-[#00ff66]/20">
+                    {aiComparison.raw || 'No raw notes found in Notion page.'}
+                  </div>
+                </div>
+
+                {/* Right Panel: AI Refined Notes (Editable) */}
+                <div className="flex flex-col h-full bg-[#060a0d] overflow-hidden">
+                  <div className="px-4 py-2.5 bg-[#09120e] border-b border-[#00ff66]/20 flex items-center justify-between shrink-0">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-[#00ff66]" />
+                      <span className="text-xs font-mono font-bold text-[#00ff66]">
+                        REFINED WALKTHROUGH (EDITABLE)
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-mono text-gray-400">
+                        {importConfig.content?.length || 0} characters
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(importConfig.content || '');
+                          alert('Refined writeup copied to clipboard!');
+                        }}
+                        className="px-2 py-1 rounded bg-[#111e17] hover:bg-[#182d22] border border-[#00ff66]/30 text-[10px] font-mono text-[#00ff66] flex items-center gap-1 cursor-pointer"
+                        title="Copy refined text"
+                      >
+                        <Copy className="w-3 h-3" /> COPY
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex-1 p-2 flex flex-col overflow-hidden">
+                    <textarea
+                      value={importConfig.content}
+                      onChange={(e) => setImportConfig({ ...importConfig, content: e.target.value })}
+                      className="w-full flex-1 bg-[#040608] border border-[#1b2631] focus:border-[#00ff66]/50 rounded-xl p-4 font-mono text-xs leading-relaxed text-[#e6edf3] focus:outline-none resize-none selection:bg-[#00ff66]/30"
+                      placeholder="Refined markdown will appear here..."
+                      spellCheck={false}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer Controls */}
+              <div className="px-6 py-3.5 bg-[#0a1015] border-t border-[#1b2631] flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+                <p className="text-xs font-mono text-gray-500 text-center sm:text-left">
+                  💡 You can edit directly in the right panel. Accepting will attach these refined notes to your site import.
+                </p>
+
+                <div className="flex items-center gap-3 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setImportConfig((prev) => ({ ...prev, content: '' }));
+                      setShowAiComparisonModal(false);
+                    }}
+                    className="px-4 py-2 bg-[#121921] hover:bg-[#1a2533] border border-[#1b2631] text-xs font-mono rounded-lg text-gray-400 hover:text-white transition-all cursor-pointer"
+                  >
+                    Discard Refinement (Keep Raw)
+                  </button>
+                  
+                  <button
+                    type="button"
+                    onClick={() => setShowAiComparisonModal(false)}
+                    className="px-5 py-2 bg-[#00ff66] hover:bg-[#00ff66]/90 text-black font-mono font-bold text-xs rounded-lg transition-all flex items-center gap-2 shadow-[0_0_20px_rgba(0,255,102,0.3)] cursor-pointer"
+                  >
+                    <Check className="w-4 h-4" />
+                    ACCEPT REFINED NOTES &amp; CONTINUE
+                  </button>
+                </div>
               </div>
             </div>
           </div>

@@ -664,6 +664,7 @@ export async function importSingleNotionPage(
     summary?: string;
     initialAccessVector?: string;
     privEscVector?: string;
+    content?: string;
   } = {}
 ) {
   const token = getNotionToken();
@@ -757,9 +758,27 @@ export async function importSingleNotionPage(
   // Preserve existing slug so database relations and URLs remain stable
   const slug = overrides.slug ? overrides.slug.trim().replace(/(^-|-$)/g, '') : (existing?.slug || candidateSlug);
 
-  // Parse blocks and re-host images
+  // Parse blocks or use refined content and re-host images
   const rehostedImages: string[] = [];
-  const fullMarkdown = await parseNotionBlocksToMarkdown(notion, pageId, slug, rehostedImages);
+  let fullMarkdown = '';
+  if (overrides.content && overrides.content.trim()) {
+    fullMarkdown = overrides.content.trim();
+    // Rehost any temporary Notion S3 images present in the content
+    const notionImgRegex = /!\[(.*?)\]\((https:\/\/[^)]*amazonaws\.com[^)]*)\)/g;
+    let match;
+    while ((match = notionImgRegex.exec(fullMarkdown)) !== null) {
+      const fullMatch = match[0];
+      const alt = match[1];
+      const s3Url = match[2];
+      const permUrl = await rehostNotionImage(s3Url, slug, `refined-${Date.now()}`);
+      if (permUrl) {
+        rehostedImages.push(permUrl);
+        fullMarkdown = fullMarkdown.replace(fullMatch, `![${alt}](${permUrl})`);
+      }
+    }
+  } else {
+    fullMarkdown = await parseNotionBlocksToMarkdown(notion, pageId, slug, rehostedImages);
+  }
 
   // Split preview content (strictly recon / nmap for locked writeups)
   const previewContent = extractReconPreview(fullMarkdown);
