@@ -58,18 +58,19 @@ Your mission is to transform raw CTF / pentest notes into a rich, detailed, step
 
 ### CRITICAL STRUCTURAL & CONTENT RULES:
 
-1. **COMMAND / SCREENSHOT FIRST -> EXPLANATION AFTER (MANDATORY)**:
-   - For every step, present the technical command or screenshot FIRST, followed immediately by its explanation:
-     * For tools and commands:
-       \`\`\`bash:command
-       $ <command>
-       <verbatim output>
-       \`\`\`
-       Followed by: The explanation of what was run, why it was run, and what the output reveals.
-     * For screenshots:
-       ![Caption](%%NOTION_IMAGE_X%%)
-       Followed by: The explanation of what is visible in the interface/request, what you observed, and what it indicates.
-   - Do NOT put lengthy explanations before the command block. The command and output lead, and the analysis follows.
+1. **UNIFIED COMMAND & OUTPUT (NEVER SPLIT, NO "*Output:*")**:
+   - The command AND its terminal output MUST be together in the EXACT SAME single code block:
+     \`\`\`bash:command
+     $ <command>
+     <verbatim output>
+     \`\`\`
+   - NEVER create a separate code block for the command and a second code block for the output!
+   - NEVER write "*Output:*" or "Output:" between code blocks!
+   - Prefix commands with a standard shell prompt ('$ ' or '# ' for Linux, 'PS C:\\...>' for PowerShell, 'SQLi>' or 'RAW SQL>' for custom script prompts).
+   - Immediately AFTER the unified code block, provide the explanation: what was run, why it was run, and what the output reveals.
+   - For screenshots:
+     ![Caption](%%NOTION_IMAGE_X%%)
+     Followed immediately by: The explanation of what is visible in the interface/request, what you observed, and what it indicates.
 
 2. **MACHINE IMAGE MUST BE AT THE VERY TOP**:
    - \`%%NOTION_IMAGE_0%%\` is the Machine Avatar / Badge (the blue suitcase on a conveyor belt in an orange circle).
@@ -281,7 +282,10 @@ Do NOT omit or switch any image token. Immediately follow each image with an exp
             }
           }
 
-          // 4. Ensure balanced code blocks
+          // 4. Automatically merge any split command and output code blocks
+          restoredText = mergeSplitCommandAndOutput(restoredText);
+
+          // 5. Ensure balanced code blocks
           const fences = (restoredText.match(/```/g) || []).length;
           if (fences % 2 !== 0) {
             restoredText += '\n```';
@@ -299,4 +303,28 @@ Do NOT omit or switch any image token. Immediately follow each image with an exp
   }
 
   throw new Error(`Gemini refinement failed across available models. Details: ${lastError}`);
+}
+
+/**
+ * Automatically merges any split command and output code blocks.
+ * Eliminates separate "*Output:*" blocks and combines them into one unified code block.
+ */
+export function mergeSplitCommandAndOutput(markdown: string): string {
+  const splitRegex = /```([a-zA-Z0-9_:-]+)\r?\n([\s\S]*?)\r?\n```\s*(?:\r?\n)*\s*(?:\*+(?:Command\s+|Scan\s+)?Output:?\*+|Output:?)?\s*(?:\r?\n)*\s*```(?:[a-zA-Z0-9_:-]+)?\r?\n([\s\S]*?)\r?\n```/gi;
+
+  let merged = markdown;
+  let prev = '';
+  while (merged !== prev) {
+    prev = merged;
+    merged = merged.replace(splitRegex, (match, lang, cmd, output) => {
+      const cleanLang = lang.includes(':command') ? lang : `${lang}:command`;
+      const cleanCmd = cmd.trim();
+      const cleanOutput = output.trim();
+      const formattedCmd = cleanCmd.startsWith('$ ') || cleanCmd.startsWith('# ') || cleanCmd.startsWith('PS ') || cleanCmd.startsWith('SQLi>') || cleanCmd.startsWith('RAW SQL>')
+        ? cleanCmd
+        : `$ ${cleanCmd}`;
+      return `\`\`\`${cleanLang}\n${formattedCmd}\n${cleanOutput}\n\`\`\``;
+    });
+  }
+  return merged;
 }
