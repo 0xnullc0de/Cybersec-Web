@@ -79,9 +79,9 @@ Your mission is to transform raw CTF / pentest notes into a rich, detailed, step
 At the VERY START of your response, output a YAML frontmatter block with extracted metadata for the machine card:
 ---
 summary: <2-3 sentence overview summarizing the target machine, key vulnerabilities, and overall compromise path>
-foothold: <concise summary of the initial foothold vector, e.g. web exploit / prompt injection / bypass / SQLi / RCE>
-privesc: <concise summary of the privilege escalation vector, e.g. internal service / impersonation / SUID / sudo rights>
-tags: <comma-separated tags based on technologies used, e.g. Windows, MSSQL, SQLi, AI Bot, Prompt Injection, Impersonation, Linux, SUID>
+foothold: <concise summary of the initial foothold vector, e.g. kiosk breakout via error dialog / web exploit / SQLi / RCE>
+privesc: <concise summary of the privilege escalation vector, e.g. DLL hijacking via Printer Administrators writable plugins folder / SUID / token impersonation>
+tags: <comma-separated tags based on technologies used, e.g. Windows, Kiosk, Kiosk Breakout, DLL Hijacking, Printer Administrators, Edge>
 difficulty: <Easy | Medium | Hard | Insane>
 os: <Windows | Linux>
 ---
@@ -99,7 +99,7 @@ os: <Windows | Linux>
 
 ### 3. CRITICAL STRUCTURAL & CONTENT RULES:
 
-1. **UNIFIED COMMAND & OUTPUT (NEVER SPLIT, NO "*Output:*")**:
+1. **UNIFIED COMMAND & VERBATIM OUTPUT (NEVER SPLIT, NEVER TRUNCATE)**:
    - The command AND its terminal output MUST be together in the EXACT SAME single code block:
      \`\`\`bash:command
      $ <command>
@@ -107,23 +107,47 @@ os: <Windows | Linux>
      \`\`\`
    - NEVER create a separate code block for the command and a second code block for the output!
    - NEVER write "*Output:*" or "Output:" between code blocks!
-   - Prefix commands with a standard shell prompt ('$ ' or '# ' for Linux, 'PS C:\\...>' for PowerShell, or custom prompt for interactive shells).
+   - **NEVER TRUNCATE, SUMMARIZE, OR ELIDE TERMINAL OUTPUTS WITH "..."**:
+     * If a command like \`whoami /all\`, \`Get-CimInstance\`, \`icacls\`, \`nmap\`, or \`ffuf\` produced detailed output in the raw notes, you MUST preserve that complete output VERBATIM!
+     * Do NOT replace group lists, user privileges, SIDs, or directory listings with "..." or "S-1-5-21-...". Keep the exact text. Full terminal output is crucial technical evidence for a professional report.
+   - Prefix commands with a standard shell prompt ('$ ' or '# ' for Linux, 'PS C:\\...>' for PowerShell, 'C:\\...>' for Windows cmd, or custom prompt for interactive shells).
    - Immediately AFTER the unified code block, provide the explanation: what was run, why it was run, and what the output reveals.
-   - For screenshots:
-     ![Caption](%%NOTION_IMAGE_X%%)
-     Followed immediately by: The explanation of what is visible in the interface/request, what you observed, and what it indicates.
 
 2. **MACHINE IMAGE MUST BE AT THE VERY TOP**:
    - \`%%NOTION_IMAGE_0%%\` is the Machine Avatar / Badge.
    - It MUST be placed at the very top of the writeup, right under the main \`# ${machineName}\` title, before the Reconnaissance / Port Scan section.
 
-3. **DEEP TECHNICAL EXPLANATIONS OF VULNERABILITIES & ATTACKS**:
-   - Thoroughly explain all vulnerability mechanisms, bypasses, filters, and safety guardrails documented in the notes.
-   - If an AI chatbot or prompt injection is present, explain how the bot was prompted to reveal operator/bypass codes and how those bypass codes were leveraged.
-   - If database attacks or impersonation are present (e.g., MSSQL permissions, \`sys.server_permissions\`, \`IMPERSONATE\`, \`sp_configure\`, \`xp_cmdshell\`), explain the exact queries and permission checks used to verify privilege escalation.
-   - If custom Python or Bash scripts are used in the notes, display the code and explain what the script automates and how it functions.
+3. **COMPREHENSIVE EXPLANATIONS FOR EVERY SCREENSHOT (NO UNEXPLAINED IMAGES)**:
+   - NEVER place screenshots back-to-back without detailed pedagogical explanation between them!
+   - Immediately BEFORE each screenshot: explain the operational purpose, what action was taken (e.g. which button was pressed, which link was clicked, which request was sent).
+   - Immediately AFTER each screenshot: break down what is displayed:
+     * Explain what is visible on the screen, window, or browser tab.
+     * Explain what any error codes, URLs, status banners, or dialog texts mean.
+     * Explain why this observation is critical to the methodology and how it leads to the next step.
 
-4. **100% METHODOLOGY & SCREENSHOT PRESERVATION**:
+4. **DEEP TECHNICAL EXPLANATIONS OF VULNERABILITIES & ATTACK VECTORS (0xdf DEPTH)**:
+   - Deeply explain the technical architecture of what is being exploited, including:
+     * **Kiosk Environments & Breakouts**:
+       - What is a Kiosk? Explain Windows Kiosk mode (Assigned Access / Shell Launcher): locked-down endpoints (e.g. airline check-in, retail terminals) intended to restrict users to a single dedicated app while hiding the desktop, taskbar, Explorer, and command line.
+       - Why did the device/scanner break and reveal an error message? When hardware components (like document readers or printers) are powered off or disconnected via backend panels, client desktop software often fails to handle device I/O errors gracefully, crashing and exposing an unhandled exception dialog (e.g. \`SCN-ERR-4092\`).
+       - Why is an error dialog vulnerable? Desktop error dialogs containing clickable hyperlinked URLs force the Windows shell to launch the default system browser (Microsoft Edge) within the kiosk session.
+       - Explain ALL exploitable breakout routes once a browser is accessible:
+         1. Open File Dialog (\`Ctrl + O\` or browser menus) to browse the filesystem, locate system binaries (\`cmd.exe\`, \`powershell.exe\`), and execute them directly.
+         2. File URI protocol: typing \`file:///C:/\` or \`file:///C:/Windows/System32/cmd.exe\` in the address bar.
+         3. Print to PDF / Save As dialogs (\`Ctrl + P\` / \`Ctrl + S\`) to spawn a native Windows Explorer dialog, allowing right-clicking files to open/run or launching cmd from the path bar.
+         4. Windows shortcut / protocol handlers (e.g., \`ms-settings:\`, \`about:flags\`, DevTools \`F12\`).
+     * **Privilege Escalation & High-Privilege Groups**:
+       - Explain why non-standard group memberships (e.g., \`Printer Administrators\`) are dangerous.
+       - Explain file/folder permission auditing with \`icacls\`: detail permission masks such as \`plugins KIOSK-042\\Printer Administrators:(OI)(CI)(M)\` (Object Inherit, Container Inherit, Modify) and explain why write access to service directories is fatal.
+       - Explain DLL Hijacking / Plugin Injection: when a service running as \`NT AUTHORITY\\SYSTEM\` (or LocalSystem) automatically scans and loads all \`.dll\` files from a writable \`plugins/\` directory upon starting/restarting, dropping a reverse shell DLL results in immediate SYSTEM-level code execution.
+     * **AI Bot & Prompt Injections**:
+       - If an AI chatbot or prompt injection is present, explain how the bot was prompted to reveal operator/bypass codes and how those bypass codes were leveraged.
+     * **Database & Service Misconfigurations**:
+       - If database attacks or impersonation are present, explain the exact queries and permission checks used to verify privilege escalation.
+     * **Custom Scripts**:
+       - If custom Python or Bash scripts are used in the notes, display the code and explain what the script automates and how it functions.
+
+5. **100% METHODOLOGY & SCREENSHOT PRESERVATION**:
    - Retain every single phase in chronological order:
      * Initial Port Scan (Nmap, rustscan, etc.)
      * Service Enumeration (SMB, RPC, LDAP, DNS, Web, etc. — retain even negative/empty findings to document methodology)
@@ -136,10 +160,10 @@ os: <Windows | Linux>
      * Root / Administrator Flag capture
    - You MUST retain EVERY SINGLE image token (\`![Caption](%%NOTION_IMAGE_X%%)\`) in its exact logical place.
 
-5. **FACTUAL ACCURACY**:
+6. **FACTUAL ACCURACY**:
    - Retain all actual IPs, hostnames, usernames, passwords, hashes, tokens, and flags verbatim from the raw notes.
 
-6. **OUTPUT FORMAT**:
+7. **OUTPUT FORMAT**:
    - Output ONLY the YAML frontmatter block followed immediately by the clean Markdown walkthrough ready for publication. Do not add chat greetings or closing remarks.`;
 }
 
@@ -304,6 +328,8 @@ export async function refineWriteupContent(
   const candidateModels = [
     'gemini-flash-lite-latest',
     'gemini-3.5-flash-lite',
+    'gemini-3.6-flash',
+    'gemini-flash-latest',
     'gemini-3.8-flash',
     'gemini-3.1-flash-lite',
   ];
@@ -312,8 +338,12 @@ export async function refineWriteupContent(
     ? `\n\n### MANDATORY IMAGE TOKENS & PLACEMENT:
 There are exactly ${imageTokens.length} screenshot images in these notes. You MUST include ALL ${imageTokens.length} image tokens (from %%NOTION_IMAGE_0%% to %%NOTION_IMAGE_${imageTokens.length - 1}%%) in your refined walkthrough:
 - %%NOTION_IMAGE_0%%: Machine Avatar / Badge (MUST be placed at the very top of the writeup, right under the title "# ${machineTitle}"!)
-- %%NOTION_IMAGE_1%% through %%NOTION_IMAGE_${imageTokens.length - 1}%%: Evidence screenshots and command output captures. Retain all of them directly in their corresponding sections based on the context in the raw notes.
-Do NOT omit or switch any image token. Immediately follow each image with an explanation of what is shown.`
+- %%NOTION_IMAGE_1%% through %%NOTION_IMAGE_${imageTokens.length - 1}%%: Evidence screenshots and command output captures.
+CRITICAL SCREENSHOT PRESENTATION:
+- Retain all of them directly in their corresponding sections based on the context in the raw notes.
+- NEVER place two images directly adjacent to each other without explanation between them!
+- Every single screenshot MUST be preceded by an explanation of what action or operational step was taken.
+- Every single screenshot MUST be followed immediately by a technical breakdown of what is shown on screen, why it happened, and what it indicates for exploitation.`
     : '';
 
   const systemPrompt = buildRefinerPrompt(machineTitle);
@@ -330,7 +360,7 @@ Do NOT omit or switch any image token. Immediately follow each image with an exp
     ],
     generationConfig: {
       temperature: 0.25,
-      maxOutputTokens: 8192,
+      maxOutputTokens: 32768,
     },
   };
 
@@ -339,12 +369,23 @@ Do NOT omit or switch any image token. Immediately follow each image with an exp
   for (const model of candidateModels) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
     try {
-      const response = await fetch(url, {
+      let response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
         signal: AbortSignal.timeout(35000),
       });
+
+      // If temporary high-demand spike (503/429), retry once after a 2-second backoff
+      if (response.status === 503 || response.status === 429) {
+        await new Promise((r) => setTimeout(r, 2000));
+        response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          signal: AbortSignal.timeout(35000),
+        });
+      }
 
       if (response.ok) {
         const data = await response.json();
