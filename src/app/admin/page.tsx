@@ -321,13 +321,29 @@ export default function AdminPage() {
           geminiApiKey: adminGeminiKey || undefined,
         }),
       });
-      const data = await res.json();
+      const text = await res.text();
+      let data: any;
+      try {
+        data = JSON.parse(text);
+      } catch (err) {
+        throw new Error(`Server returned error (${res.status}): ${text.slice(0, 180)}`);
+      }
+
       if (res.ok && data.success) {
         setAiComparison({
           raw: data.rawMarkdown,
           refined: data.refinedMarkdown,
         });
-        setImportConfig((prev) => ({ ...prev, content: data.refinedMarkdown }));
+        setImportConfig((prev) => ({
+          ...prev,
+          summary: data.metadata?.summary || prev.summary,
+          initialAccessVector: data.metadata?.initialAccessVector || prev.initialAccessVector,
+          privEscVector: data.metadata?.privEscVector || prev.privEscVector,
+          tags: data.metadata?.tags || prev.tags,
+          difficulty: data.metadata?.difficulty || prev.difficulty,
+          os: data.metadata?.os || prev.os,
+          content: data.refinedMarkdown,
+        }));
         setShowAiComparisonModal(true);
       } else {
         setMessage({ type: 'error', text: data.error || 'Failed to refine with AI' });

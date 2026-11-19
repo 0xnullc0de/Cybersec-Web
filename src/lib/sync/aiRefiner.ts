@@ -53,10 +53,46 @@ function getPlainText(richTextArray: any[]): string {
   return richTextArray.map((t) => t.plain_text || '').join('');
 }
 
+export interface WriteupMetadata {
+  summary: string;
+  initialAccessVector: string;
+  privEscVector: string;
+  tags: string;
+  difficulty: string;
+  os: string;
+}
+
+export interface RefinedWriteupResult {
+  metadata: WriteupMetadata;
+  refinedMarkdown: string;
+}
+
 export const WRITEUP_REFINER_PROMPT = `You are a cybersecurity researcher and technical author writing comprehensive, pedagogical penetration testing walkthroughs in the celebrated style of 0xdf (0xdf.gitlab.io).
 Your mission is to transform raw CTF / pentest notes into a rich, detailed, step-by-step walkthrough that is easy to read, deeply technical, and educational.
 
-### CRITICAL STRUCTURAL & CONTENT RULES:
+### 1. METADATA FRONTMATTER (MANDATORY):
+At the VERY START of your response, output a YAML frontmatter block with extracted metadata for the machine card:
+---
+summary: <2-3 sentence overview summarizing the target machine, key vulnerabilities, and overall compromise path>
+foothold: <concise summary of the initial foothold vector, e.g. TracerBot prompt injection -> bypass code (HTB-OPS-4471) -> MSSQL error/union SQLi -> xp_cmdshell command execution>
+privesc: <concise summary of the privilege escalation vector, e.g. MSSQL server principal impersonation (svc_reports) -> sysadmin role -> xp_cmdshell as svc_sql>
+tags: <comma-separated tags, e.g. Windows, MSSQL, SQLi, AI Bot, Prompt Injection, Impersonation>
+difficulty: <Easy | Medium | Hard | Insane>
+os: <Windows | Linux>
+---
+
+### 2. ABSOLUTELY NO INTRODUCTION SECTION IN THE WALKTHROUGH BODY:
+- DO NOT write an "# Introduction" or "## Introduction" section in the body!
+- The website's blog template already displays the summary and initial access / privesc vector badges above the article.
+- Having an Introduction section in the walkthrough is completely redundant and causes it to be too wordy.
+- The walkthrough text MUST start immediately with:
+  # <Machine Name>
+  ![Machine Badge](%%NOTION_IMAGE_0%%)
+  ## Reconnaissance (or ## Recon)
+  ### Port Scan
+  (NO INTRODUCTION IN BETWEEN!)
+
+### 3. CRITICAL STRUCTURAL & CONTENT RULES:
 
 1. **UNIFIED COMMAND & OUTPUT (NEVER SPLIT, NO "*Output:*")**:
    - The command AND its terminal output MUST be together in the EXACT SAME single code block:
@@ -74,7 +110,7 @@ Your mission is to transform raw CTF / pentest notes into a rich, detailed, step
 
 2. **MACHINE IMAGE MUST BE AT THE VERY TOP**:
    - \`%%NOTION_IMAGE_0%%\` is the Machine Avatar / Badge (the blue suitcase on a conveyor belt in an orange circle).
-   - It MUST be placed at the very top of the writeup, right under the main \`# Unclaimed\` title, before the Introduction or Port Scan section.
+   - It MUST be placed at the very top of the writeup, right under the main \`# Unclaimed\` title, before the Reconnaissance / Port Scan section.
    - Do NOT place the machine avatar under the web application or HTB Airlines section.
 
 3. **DETAILED AI BOT & BYPASS CODE EXPLANATION**:
@@ -113,7 +149,7 @@ Your mission is to transform raw CTF / pentest notes into a rich, detailed, step
    - Retain all actual IPs, hostnames, usernames, passwords, hashes, tokens, and flags verbatim.
 
 7. **OUTPUT FORMAT**:
-   - Output ONLY the clean Markdown walkthrough ready for publication. Do not add chat greetings or closing remarks.`;
+   - Output ONLY the YAML frontmatter block followed immediately by the clean Markdown walkthrough ready for publication. Do not add chat greetings or closing remarks.`;
 
 /**
  * Extracts raw markdown text and images from Notion blocks.
@@ -181,10 +217,44 @@ export async function parseNotionBlocksToRaw(notion: Client, blockId: string): P
 }
 
 /**
- * Refines raw markdown notes using Gemini Flash (with resilient model fallbacks).
- * Preserves 100% of images and all methodology steps.
+ * Parses frontmatter metadata and markdown content from AI output.
  */
-export async function refineWriteupContent(rawMarkdown: string, customApiKey?: string): Promise<string> {
+export function parseFrontmatterAndContent(text: string): RefinedWriteupResult {
+  const match = text.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/);
+
+  let rawMeta = '';
+  let content = text;
+
+  if (match) {
+    rawMeta = match[1];
+    content = match[2].trim();
+  }
+
+  const getField = (key: string): string => {
+    const m = rawMeta.match(new RegExp(`^${key}:\\s*(.*)$`, 'm'));
+    return m ? m[1].trim().replace(/^['"]|['"]$/g, '') : '';
+  };
+
+  const metadata: WriteupMetadata = {
+    summary: getField('summary') || 'CTF machine walkthrough and security report.',
+    initialAccessVector: getField('foothold') || getField('initialAccessVector') || '',
+    privEscVector: getField('privesc') || getField('privEscVector') || '',
+    tags: getField('tags') || 'CTF, Walkthrough',
+    difficulty: getField('difficulty') || 'Medium',
+    os: getField('os') || 'Windows',
+  };
+
+  // Strip redundant # Introduction or ## Introduction sections if present
+  content = content.replace(/^#+\s*Introduction\s*\r?\n[\s\S]*?(?=\r?\n#+)/im, '').trim();
+
+  return { metadata, refinedMarkdown: content };
+}
+
+/**
+ * Refines raw markdown notes using Gemini Flash.
+ * Preserves 100% of images, all methodology steps, and extracts writeup metadata.
+ */
+export async function refineWriteupContent(rawMarkdown: string, customApiKey?: string): Promise<RefinedWriteupResult> {
   const apiKey = customApiKey || getGeminiApiKey();
   if (!apiKey) {
     throw new Error(
@@ -193,7 +263,6 @@ export async function refineWriteupContent(rawMarkdown: string, customApiKey?: s
   }
 
   // 1. Tokenize images to clean tokens: ![caption](%%NOTION_IMAGE_0%%)
-  // This prevents huge S3 signed URLs (~800 chars each) from polluting LLM tokens and causing drops.
   const imageTokens: { placeholder: string; originalAlt: string; originalUrl: string }[] = [];
   const imgRegex = /!\[(.*?)\]\((https?:\/\/[^\s)]+)\)/g;
   let imgIndex = 0;
@@ -212,8 +281,7 @@ export async function refineWriteupContent(rawMarkdown: string, customApiKey?: s
   const candidateModels = [
     'gemini-3.1-flash-lite',
     'gemini-3.5-flash-lite',
-    'gemini-3.8-flash',
-    'gemini-flash-latest',
+    'gemini-2.5-flash',
   ];
 
   const imageDirectives = imageTokens.length > 0
@@ -256,16 +324,19 @@ Do NOT omit or switch any image token. Immediately follow each image with an exp
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(35000),
       });
 
       if (response.ok) {
         const data = await response.json();
         const refinedText = data.candidates?.[0]?.content?.parts?.[0]?.text;
         if (refinedText) {
-          // 2. Restore all image placeholders back to their original URLs
-          let restoredText = refinedText;
+          // 2. Parse frontmatter metadata and strip Introduction section
+          const parsed = parseFrontmatterAndContent(refinedText);
+          let restoredText = parsed.refinedMarkdown;
           const missedImages: typeof imageTokens = [];
 
+          // 3. Restore image URLs
           for (const img of imageTokens) {
             if (restoredText.includes(img.placeholder)) {
               restoredText = restoredText.replaceAll(img.placeholder, img.originalUrl);
@@ -274,7 +345,7 @@ Do NOT omit or switch any image token. Immediately follow each image with an exp
             }
           }
 
-          // 3. Fallback safety net: If Gemini somehow omitted any image token, append it!
+          // Fallback safety net: if any token was omitted, append it
           if (missedImages.length > 0) {
             restoredText += '\n\n## Additional Visual Evidence\n';
             for (const img of missedImages) {
@@ -291,7 +362,10 @@ Do NOT omit or switch any image token. Immediately follow each image with an exp
             restoredText += '\n```';
           }
 
-          return restoredText;
+          return {
+            metadata: parsed.metadata,
+            refinedMarkdown: restoredText,
+          };
         }
       } else {
         const errText = await response.text();

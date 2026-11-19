@@ -9,6 +9,9 @@ function getNotionToken(): string | null {
   return null;
 }
 
+export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
+
 export async function POST(request: Request) {
   try {
     const authHeader = request.headers.get('x-admin-key');
@@ -35,13 +38,14 @@ export async function POST(request: Request) {
     const rawMarkdown = await parseNotionBlocksToRaw(notion, pageId);
 
     // 2. Refine using Gemini
-    const refinedMarkdown = await refineWriteupContent(rawMarkdown, geminiApiKey);
+    const result = await refineWriteupContent(rawMarkdown, geminiApiKey);
 
     return NextResponse.json({
       success: true,
       pageId,
       rawMarkdown,
-      refinedMarkdown,
+      refinedMarkdown: result.refinedMarkdown,
+      metadata: result.metadata,
     });
   } catch (err: any) {
     console.error('Notion AI refine API error:', err);
