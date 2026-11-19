@@ -279,9 +279,10 @@ export async function refineWriteupContent(rawMarkdown: string, customApiKey?: s
   });
 
   const candidateModels = [
-    'gemini-3.1-flash-lite',
+    'gemini-flash-lite-latest',
     'gemini-3.5-flash-lite',
-    'gemini-2.5-flash',
+    'gemini-3.8-flash',
+    'gemini-3.1-flash-lite',
   ];
 
   const imageDirectives = imageTokens.length > 0
@@ -315,7 +316,7 @@ Do NOT omit or switch any image token. Immediately follow each image with an exp
     },
   };
 
-  let lastError: string = '';
+  const modelErrors: string[] = [];
 
   for (const model of candidateModels) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
@@ -369,14 +370,14 @@ Do NOT omit or switch any image token. Immediately follow each image with an exp
         }
       } else {
         const errText = await response.text();
-        lastError = `Model ${model} returned (${response.status}): ${errText}`;
+        modelErrors.push(`[${model}] HTTP ${response.status}: ${errText.slice(0, 200)}`);
       }
     } catch (e: any) {
-      lastError = `Model ${model} request error: ${e.message}`;
+      modelErrors.push(`[${model}] ${e.message}`);
     }
   }
 
-  throw new Error(`Gemini refinement failed across available models. Details: ${lastError}`);
+  throw new Error(`Gemini refinement failed across available models: ${modelErrors.join(' | ')}`);
 }
 
 /**
