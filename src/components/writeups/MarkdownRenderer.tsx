@@ -194,11 +194,12 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
               const trimmed = line.trim();
               if (!trimmed) return null;
 
-              // Image syntax: ![alt](url)
-              const imgMatch = trimmed.match(/^!\[(.*?)\]\((.*?)\)$/);
+              // Image syntax: ![alt](url) with optional trailing caption
+              const imgMatch = trimmed.match(/^!\[(.*?)\]\(\s*([^\s)]+)(?:\s+["'][^"']*["'])?\s*\)(.*)$/);
               if (imgMatch) {
                 const altText = imgMatch[1] || 'Screenshot';
                 const imgUrl = imgMatch[2];
+                const trailingText = imgMatch[3]?.trim();
 
                 return (
                   <div key={lIdx} className="my-6 rounded-xl border border-[#1b2631] bg-[#070b0e] p-2 sm:p-3 overflow-hidden shadow-xl break-inside-avoid print:break-inside-avoid print:my-4">
@@ -213,6 +214,11 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
                       loading="lazy"
                       className="w-full h-auto rounded-lg border border-[#151f28] object-contain print:max-h-[75vh]"
                     />
+                    {trailingText && (
+                      <p className="text-xs font-mono text-gray-400 mt-2.5 px-2 italic border-t border-[#151f28] pt-2">
+                        {trailingText.replace(/^\*+|\*+$/g, '').trim()}
+                      </p>
+                    )}
                   </div>
                 );
               }

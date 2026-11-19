@@ -53,39 +53,54 @@ function getPlainText(richTextArray: any[]): string {
   return richTextArray.map((t) => t.plain_text || '').join('');
 }
 
-export const WRITEUP_REFINER_PROMPT = `You are a sharp, experienced Red Team operator and technical author for a premier cybersecurity research blog (Nulbyt3 Vault).
-Your goal is to articulate raw, casual CTF notes into a clean, concise, and professional penetration testing walkthrough.
+export const WRITEUP_REFINER_PROMPT = `You are a sharp, seasoned Red Team operator and lead technical author for a premier cybersecurity research archive (Nulbyt3 Vault).
+Your mission is to transform raw penetration testing / CTF notes into a comprehensive, high-caliber, publication-ready technical walkthrough.
 
-### CRITICAL STYLE GUIDELINES (ANTI-WORDINESS):
-- **BE CONCISE & DIRECT**: Cut unnecessary filler, fluff, and academic preamble. Avoid stating the obvious.
-- **DO NOT LECTURE ON BASIC FLAGS**: Do NOT explain standard tool flags (e.g. do not explain what -sC, -sV, -p-, -oA, or sudo do). Pentesters already know what they do.
-- **NO GENERIC HEADERS**: Do NOT write headers like "**Technical Analysis:**" or "**Flag Breakdown:**". Simply state what was found and what it means directly in 1 to 3 punchy sentences.
-- **KEEP PARAGRAPHS LEAN**: Focus on actionable findings: what port is open, what vulnerability exists, what response was returned, and the immediate next move.
+### CRITICAL REQUIREMENTS (NON-NEGOTIABLE):
 
-### STRICT STRUCTURAL RULES:
-1. **UNIFIED COMMAND & OUTPUT (DO NOT SPLIT)**:
-   - Keep the command and its terminal output together in the SAME code block. Do NOT split them into separate command and output blocks.
-   - Prefix the command with a prompt character (e.g. '$ ' or '# ' for Linux, or 'PS C:\\...>' for PowerShell, or 'SQLi> ' for interactive tools):
+1. **COMPLETE METHODOLOGY RECORD (DO NOT CONDENSE OR SUMMARIZE AWAY STEPS)**:
+   - In penetration testing and professional writeups, methodology is paramount. DO NOT cut, omit, summarize away, or truncate ANY enumeration step, tool execution, or finding.
+   - Retain every single phase in chronological order:
+     * Host Discovery & Initial Port Scans (e.g. full TCP nmap)
+     * SMB Enumeration (e.g. smbclient, crackmapexec, anonymous/null sessions, share listings) - MUST be documented even if results were empty or access denied!
+     * Web Service Enumeration & Virtual Hosts (e.g. /etc/hosts mapping, initial web portal discovery)
+     * Directory Brute-Forcing (e.g. feroxbuster, gobuster, dirsearch) - retain full command and discovered endpoints/status codes
+     * Subdomain / VHost Fuzzing (e.g. ffuf) - retain findings
+     * Proxy Inspection & Burp Suite observations
+     * Parameter Testing & SQL Injection discovery
+     * Filter Bypass techniques & payload evolution
+     * Custom Automation Scripts (e.g. Python scripts) - summarize script purpose in 2-3 bullets, include the script code block, command used to execute it, and terminal output
+     * Database Exploitation (MSSQL user enumeration, database impersonation, xp_cmdshell)
+     * Foothold Reverse Shell (e.g. Penelope, netcat, PowerShell)
+     * User Flag capture
+     * Post-Compromise Privilege Auditing (token privileges, SeImpersonate, internal enumeration)
+   - If the raw notes ran a tool, you MUST include that tool's command and its output.
+
+2. **100% IMAGE PRESERVATION (MANDATORY)**:
+   - You MUST retain EVERY SINGLE image token (\`![Caption](%%NOTION_IMAGE_X%%)\`) provided in the notes.
+   - NEVER drop, delete, skip, or group away any image token.
+   - Place each image token in its proper logical section.
+   - Immediately follow every image with a 1-2 sentence description explaining what is shown in the screenshot.
+
+3. **CONCISE & SHARP WRITING (NO WORDINESS)**:
+   - Eliminate all conversational fluff ("Next, I decided to...", "Let's see what happens here...", "In this step...").
+   - NEVER lecture the reader on basic tool flags (e.g. DO NOT explain what -sC, -sV, -p-, or sudo mean). Pentesters already know what standard flags do.
+   - NEVER use generic boilerplate headers like "**Technical Analysis:**" or "**Flag Breakdown:**". State findings directly.
+   - Keep prose punchy, technical, and direct (1 to 3 sentences per finding).
+
+4. **UNIFIED COMMAND & OUTPUT (DO NOT SPLIT)**:
+   - Every command and its terminal output MUST be together in the SAME code block:
      \`\`\`bash:command
      $ <command>
      <verbatim output>
      \`\`\`
-   - Immediately follow the code block with a crisp, direct explanation of the findings (e.g. key open ports, user identities, misconfigurations) without fluff.
+   - Prefix commands with a prompt character ('$ ' or '# ' for Linux, 'PS C:\\...>' for PowerShell, 'SQLi>' or 'RAW SQL>' for custom scripts).
+   - NEVER split a command into one block and its output into a separate block.
 
-2. **SCREENSHOTS / EVIDENCE**:
-   - Keep images in place: \`![Caption](url)\`.
-   - Add a brief 1-2 sentence description explaining what is shown (e.g. the input form, Burp request/response, or error message).
+5. **FACTUAL FIDELITY**:
+   - Retain all actual IPs, hostnames, usernames, passwords, hashes, tokens, and flags verbatim.
 
-3. **CUSTOM SCRIPTS**:
-   - Provide a concise 2-3 bullet summary explaining what the script automates (payload structure, endpoints, parsing).
-   - Display the script code block (\`\`\`python:command or \`\`\`python).
-   - Follow with the command used to run it, its output, and the immediate takeaway.
-
-4. **100% FACTUAL ACCURACY**:
-   - NEVER alter or hallucinate IP addresses, ports, usernames, passwords, hashes, tokens, or flags.
-   - Retain all actual credentials, tokens (e.g. HTB-OPS-4471, svc_tracer_ro, svc_reports, unclaimed\\svc_sql), and flag strings verbatim.
-
-5. **OUTPUT**:
+6. **OUTPUT**:
    - Output ONLY the clean Markdown walkthrough ready for publication. Do not add chat greetings or closing remarks.`;
 
 /**
@@ -155,6 +170,7 @@ export async function parseNotionBlocksToRaw(notion: Client, blockId: string): P
 
 /**
  * Refines raw markdown notes using Gemini Flash (with resilient model fallbacks).
+ * Preserves 100% of images and all methodology steps.
  */
 export async function refineWriteupContent(rawMarkdown: string, customApiKey?: string): Promise<string> {
   const apiKey = customApiKey || getGeminiApiKey();
@@ -164,6 +180,23 @@ export async function refineWriteupContent(rawMarkdown: string, customApiKey?: s
     );
   }
 
+  // 1. Tokenize images to clean tokens: ![caption](%%NOTION_IMAGE_0%%)
+  // This prevents huge S3 signed URLs (~800 chars each) from polluting LLM tokens and causing drops.
+  const imageTokens: { placeholder: string; originalAlt: string; originalUrl: string }[] = [];
+  const imgRegex = /!\[(.*?)\]\((https?:\/\/[^\s)]+)\)/g;
+  let imgIndex = 0;
+
+  const tokenizedMarkdown = rawMarkdown.replace(imgRegex, (fullMatch, alt, url) => {
+    const placeholder = `%%NOTION_IMAGE_${imgIndex}%%`;
+    imageTokens.push({
+      placeholder,
+      originalAlt: alt?.trim() || 'Exploitation Screenshot',
+      originalUrl: url.trim(),
+    });
+    imgIndex++;
+    return `![${alt?.trim() || 'Exploitation Screenshot'}](${placeholder})`;
+  });
+
   const candidateModels = [
     'gemini-3.1-flash-lite',
     'gemini-3.5-flash-lite',
@@ -171,18 +204,22 @@ export async function refineWriteupContent(rawMarkdown: string, customApiKey?: s
     'gemini-flash-latest',
   ];
 
+  const imageDirectives = imageTokens.length > 0
+    ? `\n\n### MANDATORY IMAGE TOKENS:\nThere are exactly ${imageTokens.length} screenshot images in these notes. You MUST include ALL ${imageTokens.length} image tokens below in your refined walkthrough:\n${imageTokens.map((img) => `- ${img.placeholder} (${img.originalAlt})`).join('\n')}\nDo NOT omit any token.`
+    : '';
+
   const payload = {
     contents: [
       {
         role: 'user',
         parts: [
-          { text: WRITEUP_REFINER_PROMPT },
-          { text: `Raw writeup notes to refine:\n\n${rawMarkdown}` },
+          { text: WRITEUP_REFINER_PROMPT + imageDirectives },
+          { text: `Raw writeup notes to refine into a comprehensive walkthrough:\n\n${tokenizedMarkdown}` },
         ],
       },
     ],
     generationConfig: {
-      temperature: 0.2,
+      temperature: 0.1,
       maxOutputTokens: 8192,
     },
   };
@@ -201,7 +238,35 @@ export async function refineWriteupContent(rawMarkdown: string, customApiKey?: s
       if (response.ok) {
         const data = await response.json();
         const refinedText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (refinedText) return refinedText;
+        if (refinedText) {
+          // 2. Restore all image placeholders back to their original URLs
+          let restoredText = refinedText;
+          const missedImages: typeof imageTokens = [];
+
+          for (const img of imageTokens) {
+            if (restoredText.includes(img.placeholder)) {
+              restoredText = restoredText.replaceAll(img.placeholder, img.originalUrl);
+            } else {
+              missedImages.push(img);
+            }
+          }
+
+          // 3. Fallback safety net: If Gemini somehow omitted any image token, append it!
+          if (missedImages.length > 0) {
+            restoredText += '\n\n## Additional Visual Evidence\n';
+            for (const img of missedImages) {
+              restoredText += `\n![${img.originalAlt}](${img.originalUrl})\n*Screenshot: ${img.originalAlt}*\n`;
+            }
+          }
+
+          // 4. Ensure balanced code blocks
+          const fences = (restoredText.match(/```/g) || []).length;
+          if (fences % 2 !== 0) {
+            restoredText += '\n```';
+          }
+
+          return restoredText;
+        }
       } else {
         const errText = await response.text();
         lastError = `Model ${model} returned (${response.status}): ${errText}`;

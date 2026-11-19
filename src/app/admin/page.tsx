@@ -8,6 +8,7 @@ import {
   BookOpen, Image as ImageIcon, Upload, X, Wrench, Code2, Loader2
 } from 'lucide-react';
 import Link from 'next/link';
+import MarkdownRenderer from '@/components/writeups/MarkdownRenderer';
 
 export default function AdminPage() {
   const [adminKey, setAdminKey] = useState('');
@@ -44,6 +45,8 @@ export default function AdminPage() {
   const [aiRefining, setAiRefining] = useState(false);
   const [aiComparison, setAiComparison] = useState<{ raw: string; refined: string } | null>(null);
   const [showAiComparisonModal, setShowAiComparisonModal] = useState(false);
+  const [comparisonLeftView, setComparisonLeftView] = useState<'preview' | 'raw'>('preview');
+  const [comparisonRightView, setComparisonRightView] = useState<'preview' | 'edit'>('preview');
   const [adminGeminiKey, setAdminGeminiKey] = useState<string>('');
   const [importConfig, setImportConfig] = useState({
     title: '',
@@ -2536,32 +2539,99 @@ export default function AdminPage() {
                 {/* Left Panel: Raw Notion Notes */}
                 <div className="flex flex-col h-full bg-[#050709] overflow-hidden">
                   <div className="px-4 py-2.5 bg-[#090d12] border-b border-[#1b2631] flex items-center justify-between shrink-0">
-                    <span className="text-xs font-mono font-bold text-gray-400 flex items-center gap-2">
+                    <div className="flex items-center gap-2">
                       <FileText className="w-4 h-4 text-gray-400" />
-                      ORIGINAL RAW NOTION NOTES (READ-ONLY)
-                    </span>
-                    <span className="text-[11px] font-mono text-gray-500">
-                      {aiComparison.raw.length} characters
-                    </span>
+                      <span className="text-xs font-mono font-bold text-gray-300">
+                        ORIGINAL NOTION NOTES
+                      </span>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#111923] text-gray-400 border border-[#1b2631]">
+                        {(aiComparison.raw.match(/!\[.*?\]\(.*?\)/g) || []).length} images
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-mono text-gray-500 hidden sm:inline">
+                        {aiComparison.raw.length} chars
+                      </span>
+                      <div className="flex rounded-lg border border-[#1b2631] bg-[#05080c] p-0.5">
+                        <button
+                          type="button"
+                          onClick={() => setComparisonLeftView('preview')}
+                          className={`px-2.5 py-1 text-[11px] font-mono rounded font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
+                            comparisonLeftView === 'preview'
+                              ? 'bg-[#00ff66]/20 text-[#00ff66] border border-[#00ff66]/40'
+                              : 'text-gray-400 hover:text-white'
+                          }`}
+                        >
+                          <Eye className="w-3 h-3" /> VISUAL
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setComparisonLeftView('raw')}
+                          className={`px-2.5 py-1 text-[11px] font-mono rounded font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
+                            comparisonLeftView === 'raw'
+                              ? 'bg-[#1b2631] text-white border border-[#2c3e50]'
+                              : 'text-gray-400 hover:text-white'
+                          }`}
+                        >
+                          <Code2 className="w-3 h-3" /> RAW
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex-1 p-4 overflow-y-auto font-mono text-xs leading-relaxed text-gray-300 whitespace-pre-wrap select-text selection:bg-[#00ff66]/20">
-                    {aiComparison.raw || 'No raw notes found in Notion page.'}
-                  </div>
+
+                  {comparisonLeftView === 'preview' ? (
+                    <div className="flex-1 p-5 overflow-y-auto bg-[#070b0e] select-text">
+                      <MarkdownRenderer content={aiComparison.raw} />
+                    </div>
+                  ) : (
+                    <div className="flex-1 p-4 overflow-y-auto font-mono text-xs leading-relaxed text-gray-300 whitespace-pre-wrap select-text selection:bg-[#00ff66]/20">
+                      {aiComparison.raw || 'No raw notes found in Notion page.'}
+                    </div>
+                  )}
                 </div>
 
-                {/* Right Panel: AI Refined Notes (Editable) */}
+                {/* Right Panel: AI Refined Notes (Visual Preview or Editable) */}
                 <div className="flex flex-col h-full bg-[#060a0d] overflow-hidden">
                   <div className="px-4 py-2.5 bg-[#09120e] border-b border-[#00ff66]/20 flex items-center justify-between shrink-0">
                     <div className="flex items-center gap-2">
                       <Sparkles className="w-4 h-4 text-[#00ff66]" />
                       <span className="text-xs font-mono font-bold text-[#00ff66]">
-                        REFINED WALKTHROUGH (EDITABLE)
+                        REFINED WALKTHROUGH
+                      </span>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#00ff66]/10 text-[#00ff66] border border-[#00ff66]/30">
+                        {((importConfig.content || '').match(/!\[.*?\]\(.*?\)/g) || []).length} images
                       </span>
                     </div>
+
                     <div className="flex items-center gap-2">
-                      <span className="text-[11px] font-mono text-gray-400">
-                        {importConfig.content?.length || 0} characters
+                      <span className="text-[11px] font-mono text-gray-400 hidden sm:inline">
+                        {importConfig.content?.length || 0} chars
                       </span>
+                      <div className="flex rounded-lg border border-[#1b2631] bg-[#05080c] p-0.5">
+                        <button
+                          type="button"
+                          onClick={() => setComparisonRightView('preview')}
+                          className={`px-2.5 py-1 text-[11px] font-mono rounded font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
+                            comparisonRightView === 'preview'
+                              ? 'bg-[#00ff66]/20 text-[#00ff66] border border-[#00ff66]/40'
+                              : 'text-gray-400 hover:text-white'
+                          }`}
+                        >
+                          <Eye className="w-3 h-3" /> VISUAL
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setComparisonRightView('edit')}
+                          className={`px-2.5 py-1 text-[11px] font-mono rounded font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
+                            comparisonRightView === 'edit'
+                              ? 'bg-[#1b2631] text-white border border-[#2c3e50]'
+                              : 'text-gray-400 hover:text-white'
+                          }`}
+                        >
+                          <Edit3 className="w-3 h-3" /> EDIT
+                        </button>
+                      </div>
                       <button
                         type="button"
                         onClick={() => {
@@ -2575,15 +2645,28 @@ export default function AdminPage() {
                       </button>
                     </div>
                   </div>
-                  <div className="flex-1 p-2 flex flex-col overflow-hidden">
-                    <textarea
-                      value={importConfig.content}
-                      onChange={(e) => setImportConfig({ ...importConfig, content: e.target.value })}
-                      className="w-full flex-1 bg-[#040608] border border-[#1b2631] focus:border-[#00ff66]/50 rounded-xl p-4 font-mono text-xs leading-relaxed text-[#e6edf3] focus:outline-none resize-none selection:bg-[#00ff66]/30"
-                      placeholder="Refined markdown will appear here..."
-                      spellCheck={false}
-                    />
-                  </div>
+
+                  {comparisonRightView === 'preview' ? (
+                    <div className="flex-1 p-5 overflow-y-auto bg-[#070b0e] select-text">
+                      {importConfig.content ? (
+                        <MarkdownRenderer content={importConfig.content} />
+                      ) : (
+                        <div className="text-gray-500 font-mono text-xs italic p-4">
+                          Refined markdown will appear here...
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex-1 p-2 flex flex-col overflow-hidden">
+                      <textarea
+                        value={importConfig.content}
+                        onChange={(e) => setImportConfig({ ...importConfig, content: e.target.value })}
+                        className="w-full flex-1 bg-[#040608] border border-[#1b2631] focus:border-[#00ff66]/50 rounded-xl p-4 font-mono text-xs leading-relaxed text-[#e6edf3] focus:outline-none resize-none selection:bg-[#00ff66]/30"
+                        placeholder="Refined markdown will appear here..."
+                        spellCheck={false}
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
 
