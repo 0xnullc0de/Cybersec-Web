@@ -67,16 +67,21 @@ export interface RefinedWriteupResult {
   refinedMarkdown: string;
 }
 
-export const WRITEUP_REFINER_PROMPT = `You are a cybersecurity researcher and technical author writing comprehensive, pedagogical penetration testing walkthroughs in the celebrated style of 0xdf (0xdf.gitlab.io).
+export function buildRefinerPrompt(machineName: string): string {
+  return `You are a cybersecurity researcher and technical author writing comprehensive, pedagogical penetration testing walkthroughs in the celebrated style of 0xdf (0xdf.gitlab.io).
 Your mission is to transform raw CTF / pentest notes into a rich, detailed, step-by-step walkthrough that is easy to read, deeply technical, and educational.
+
+### TARGET MACHINE:
+- Machine Name: "${machineName}"
+- The walkthrough H1 title MUST start with: "# ${machineName}"
 
 ### 1. METADATA FRONTMATTER (MANDATORY):
 At the VERY START of your response, output a YAML frontmatter block with extracted metadata for the machine card:
 ---
 summary: <2-3 sentence overview summarizing the target machine, key vulnerabilities, and overall compromise path>
-foothold: <concise summary of the initial foothold vector, e.g. TracerBot prompt injection -> bypass code (HTB-OPS-4471) -> MSSQL error/union SQLi -> xp_cmdshell command execution>
-privesc: <concise summary of the privilege escalation vector, e.g. MSSQL server principal impersonation (svc_reports) -> sysadmin role -> xp_cmdshell as svc_sql>
-tags: <comma-separated tags, e.g. Windows, MSSQL, SQLi, AI Bot, Prompt Injection, Impersonation>
+foothold: <concise summary of the initial foothold vector, e.g. web exploit / prompt injection / bypass / SQLi / RCE>
+privesc: <concise summary of the privilege escalation vector, e.g. internal service / impersonation / SUID / sudo rights>
+tags: <comma-separated tags based on technologies used, e.g. Windows, MSSQL, SQLi, AI Bot, Prompt Injection, Impersonation, Linux, SUID>
 difficulty: <Easy | Medium | Hard | Insane>
 os: <Windows | Linux>
 ---
@@ -86,7 +91,7 @@ os: <Windows | Linux>
 - The website's blog template already displays the summary and initial access / privesc vector badges above the article.
 - Having an Introduction section in the walkthrough is completely redundant and causes it to be too wordy.
 - The walkthrough text MUST start immediately with:
-  # <Machine Name>
+  # ${machineName}
   ![Machine Badge](%%NOTION_IMAGE_0%%)
   ## Reconnaissance (or ## Recon)
   ### Port Scan
@@ -102,54 +107,43 @@ os: <Windows | Linux>
      \`\`\`
    - NEVER create a separate code block for the command and a second code block for the output!
    - NEVER write "*Output:*" or "Output:" between code blocks!
-   - Prefix commands with a standard shell prompt ('$ ' or '# ' for Linux, 'PS C:\\...>' for PowerShell, 'SQLi>' or 'RAW SQL>' for custom script prompts).
+   - Prefix commands with a standard shell prompt ('$ ' or '# ' for Linux, 'PS C:\\...>' for PowerShell, or custom prompt for interactive shells).
    - Immediately AFTER the unified code block, provide the explanation: what was run, why it was run, and what the output reveals.
    - For screenshots:
      ![Caption](%%NOTION_IMAGE_X%%)
      Followed immediately by: The explanation of what is visible in the interface/request, what you observed, and what it indicates.
 
 2. **MACHINE IMAGE MUST BE AT THE VERY TOP**:
-   - \`%%NOTION_IMAGE_0%%\` is the Machine Avatar / Badge (the blue suitcase on a conveyor belt in an orange circle).
-   - It MUST be placed at the very top of the writeup, right under the main \`# Unclaimed\` title, before the Reconnaissance / Port Scan section.
-   - Do NOT place the machine avatar under the web application or HTB Airlines section.
+   - \`%%NOTION_IMAGE_0%%\` is the Machine Avatar / Badge.
+   - It MUST be placed at the very top of the writeup, right under the main \`# ${machineName}\` title, before the Reconnaissance / Port Scan section.
 
-3. **DETAILED AI BOT & BYPASS CODE EXPLANATION**:
-   - The web application hosts "TracerBot" (an AI chatbot at \`/ask\`) that takes natural language queries, converts them into SQL statements via an LLM, and queries the backend Microsoft SQL Server database.
-   - When attempting arbitrary SQL injection payloads directly, the AI bot's guardrail intercepts it and replies that it cannot execute the code.
-   - By prompting the AI bot to reveal its internal operator/emergency bypass code (prompt injection / social engineering the bot), the bot reveals the bypass code: \`HTB-OPS-4471\`.
-   - Prepending \`HTB-OPS-4471\` before our input completely bypasses the bot's validation check and safety filter, allowing direct, arbitrary SQL injection (\`' UNION SELECT ...\`).
-   - Thoroughly document and explain this vulnerability mechanism in full detail.
+3. **DEEP TECHNICAL EXPLANATIONS OF VULNERABILITIES & ATTACKS**:
+   - Thoroughly explain all vulnerability mechanisms, bypasses, filters, and safety guardrails documented in the notes.
+   - If an AI chatbot or prompt injection is present, explain how the bot was prompted to reveal operator/bypass codes and how those bypass codes were leveraged.
+   - If database attacks or impersonation are present (e.g., MSSQL permissions, \`sys.server_permissions\`, \`IMPERSONATE\`, \`sp_configure\`, \`xp_cmdshell\`), explain the exact queries and permission checks used to verify privilege escalation.
+   - If custom Python or Bash scripts are used in the notes, display the code and explain what the script automates and how it functions.
 
-4. **MSSQL IMPERSONATION ENUMERATION TECHNIQUE (\`svc_reports\`)**:
-   - Detail the exact technique used to discover that \`svc_tracer_ro\` has access to impersonate \`svc_reports\`:
-     * Checking current privileges: Running \`SELECT IS_SRVROLEMEMBER('sysadmin')\` as \`svc_tracer_ro\` returns \`0\` (Role: 0), confirming we are not a database administrator.
-     * Impersonation audit query: To find privilege escalation paths in SQL Server, we query SQL Server's permission catalog:
-       \`SELECT STRING_AGG(name, ', ') FROM sys.server_principals WHERE principal_id IN (SELECT major_id FROM sys.server_permissions WHERE permission_name = 'IMPERSONATE' AND grantee_principal_id = (SELECT principal_id FROM sys.server_principals WHERE name = 'svc_tracer_ro'))\`
-     * Explain what this query does: It inspects \`sys.server_permissions\` to find any server logins where \`svc_tracer_ro\` is granted \`IMPERSONATE\` rights.
-     * The query returns \`svc_reports\`.
-     * We test impersonating this account: \`EXECUTE AS LOGIN = 'svc_reports'; SELECT IS_SRVROLEMEMBER('sysadmin')\`. The result is \`1\`, confirming \`svc_reports\` IS a full sysadmin!
-     * As sysadmin, we use \`sp_configure\` to enable \`show advanced options\` and \`xp_cmdshell\`, enabling direct operating system command execution on the target Windows host as \`svc_sql\`.
-
-5. **100% METHODOLOGY & SCREENSHOT PRESERVATION**:
+4. **100% METHODOLOGY & SCREENSHOT PRESERVATION**:
    - Retain every single phase in chronological order:
-     * Initial Nmap Port Scan
-     * SMB Enumeration (NetExec / smbclient) — retain even negative/empty findings, explaining that null sessions are disabled
-     * DNS / Hosts File Configuration (/etc/hosts)
-     * Web Service Enumeration (HTB Airlines TracerBot portal)
-     * Directory Brute-Forcing & Subdomain Fuzzing
-     * Vulnerability Discovery & Bypass Code extraction from the AI bot
-     * Custom Python Automation Scripts (explain what the script automates, show the script code, show execution and output)
-     * Database Exploitation & Impersonation of \`svc_reports\`
-     * Enabling \`xp_cmdshell\` and Foothold Reverse Shell (Penelope)
+     * Initial Port Scan (Nmap, rustscan, etc.)
+     * Service Enumeration (SMB, RPC, LDAP, DNS, Web, etc. — retain even negative/empty findings to document methodology)
+     * Directory Brute-Forcing, Subdomain Fuzzing, or API Discovery
+     * Vulnerability Identification & Exploitation
+     * Custom Automation / Exploit Scripts (explain purpose, show code, show execution & output)
+     * Initial Foothold & Reverse Shell
      * User Flag capture
-     * Post-Exploitation Privilege Auditing
+     * Internal Enumeration & Privilege Escalation
+     * Root / Administrator Flag capture
    - You MUST retain EVERY SINGLE image token (\`![Caption](%%NOTION_IMAGE_X%%)\`) in its exact logical place.
 
-6. **FACTUAL ACCURACY**:
-   - Retain all actual IPs, hostnames, usernames, passwords, hashes, tokens, and flags verbatim.
+5. **FACTUAL ACCURACY**:
+   - Retain all actual IPs, hostnames, usernames, passwords, hashes, tokens, and flags verbatim from the raw notes.
 
-7. **OUTPUT FORMAT**:
+6. **OUTPUT FORMAT**:
    - Output ONLY the YAML frontmatter block followed immediately by the clean Markdown walkthrough ready for publication. Do not add chat greetings or closing remarks.`;
+}
+
+export const WRITEUP_REFINER_PROMPT = buildRefinerPrompt('Target Machine');
 
 /**
  * Extracts raw markdown text and images from Notion blocks.
@@ -250,16 +244,45 @@ export function parseFrontmatterAndContent(text: string): RefinedWriteupResult {
   return { metadata, refinedMarkdown: content };
 }
 
+export interface RefineOptions {
+  customApiKey?: string;
+  pageTitle?: string;
+}
+
 /**
  * Refines raw markdown notes using Gemini Flash.
  * Preserves 100% of images, all methodology steps, and extracts writeup metadata.
  */
-export async function refineWriteupContent(rawMarkdown: string, customApiKey?: string): Promise<RefinedWriteupResult> {
+export async function refineWriteupContent(
+  rawMarkdown: string,
+  optionsOrApiKey?: string | RefineOptions
+): Promise<RefinedWriteupResult> {
+  let customApiKey: string | undefined;
+  let pageTitle: string | undefined;
+
+  if (typeof optionsOrApiKey === 'string') {
+    customApiKey = optionsOrApiKey;
+  } else if (optionsOrApiKey && typeof optionsOrApiKey === 'object') {
+    customApiKey = optionsOrApiKey.customApiKey;
+    pageTitle = optionsOrApiKey.pageTitle;
+  }
+
   const apiKey = customApiKey || getGeminiApiKey();
   if (!apiKey) {
     throw new Error(
       'GEMINI_API_KEY is not set. Please add GEMINI_API_KEY=your_key to .env.local'
     );
+  }
+
+  // Resolve target machine name
+  let machineTitle = pageTitle?.trim();
+  if (!machineTitle) {
+    const titleMatch = rawMarkdown.match(/^#\s+(.+)$/m);
+    if (titleMatch) {
+      machineTitle = titleMatch[1].trim();
+    } else {
+      machineTitle = 'Machine Walkthrough';
+    }
   }
 
   // 1. Tokenize images to clean tokens: ![caption](%%NOTION_IMAGE_0%%)
@@ -287,26 +310,21 @@ export async function refineWriteupContent(rawMarkdown: string, customApiKey?: s
 
   const imageDirectives = imageTokens.length > 0
     ? `\n\n### MANDATORY IMAGE TOKENS & PLACEMENT:
-There are exactly ${imageTokens.length} screenshot images in these notes. You MUST include ALL ${imageTokens.length} image tokens in your refined walkthrough:
-- %%NOTION_IMAGE_0%%: Machine Avatar / Badge (MUST be placed at the very top of the writeup, right under the title "# Unclaimed"!)
-- %%NOTION_IMAGE_1%%: HTB Airlines Baggage Service Desk website homepage
-- %%NOTION_IMAGE_2%%: TracerBot chat / query interface
-- %%NOTION_IMAGE_3%%: Burp Suite HTTP request / response observation
-- %%NOTION_IMAGE_4%%: SQL query input attempt in TracerBot
-- %%NOTION_IMAGE_5%%: AI bot blocking arbitrary SQL queries
-- %%NOTION_IMAGE_6%%: Asking the AI bot for the operator bypass code and getting HTB-OPS-4471
-- %%NOTION_IMAGE_7%%: Prepending HTB-OPS-4471 to bypass the AI filter and achieve SQL injection
-- %%NOTION_IMAGE_8%%: Querying database schema / tables
+There are exactly ${imageTokens.length} screenshot images in these notes. You MUST include ALL ${imageTokens.length} image tokens (from %%NOTION_IMAGE_0%% to %%NOTION_IMAGE_${imageTokens.length - 1}%%) in your refined walkthrough:
+- %%NOTION_IMAGE_0%%: Machine Avatar / Badge (MUST be placed at the very top of the writeup, right under the title "# ${machineTitle}"!)
+- %%NOTION_IMAGE_1%% through %%NOTION_IMAGE_${imageTokens.length - 1}%%: Evidence screenshots and command output captures. Retain all of them directly in their corresponding sections based on the context in the raw notes.
 Do NOT omit or switch any image token. Immediately follow each image with an explanation of what is shown.`
     : '';
+
+  const systemPrompt = buildRefinerPrompt(machineTitle);
 
   const payload = {
     contents: [
       {
         role: 'user',
         parts: [
-          { text: WRITEUP_REFINER_PROMPT + imageDirectives },
-          { text: `Raw writeup notes to refine into a comprehensive walkthrough:\n\n${tokenizedMarkdown}` },
+          { text: systemPrompt + imageDirectives },
+          { text: `Raw writeup notes for target machine "${machineTitle}" to refine into a comprehensive walkthrough:\n\n${tokenizedMarkdown}` },
         ],
       },
     ],
@@ -335,6 +353,14 @@ Do NOT omit or switch any image token. Immediately follow each image with an exp
           // 2. Parse frontmatter metadata and strip Introduction section
           const parsed = parseFrontmatterAndContent(refinedText);
           let restoredText = parsed.refinedMarkdown;
+
+          // Enforce correct H1 machine title
+          if (!restoredText.startsWith('# ')) {
+            restoredText = `# ${machineTitle}\n\n` + restoredText;
+          } else {
+            restoredText = restoredText.replace(/^#\s+[^\r\n]+/m, `# ${machineTitle}`);
+          }
+
           const missedImages: typeof imageTokens = [];
 
           // 3. Restore image URLs

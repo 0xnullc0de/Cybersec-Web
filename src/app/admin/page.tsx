@@ -318,6 +318,7 @@ export default function AdminPage() {
         },
         body: JSON.stringify({ 
           pageId,
+          pageTitle: selectedNotionPage?.title || importConfig.title,
           geminiApiKey: adminGeminiKey || undefined,
         }),
       });

@@ -21,7 +21,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { pageId, geminiApiKey } = body;
+    const { pageId, geminiApiKey, pageTitle } = body;
 
     if (!pageId) {
       return NextResponse.json({ error: 'pageId is required' }, { status: 400 });
@@ -37,8 +37,23 @@ export async function POST(request: Request) {
     // 1. Fetch raw blocks from Notion
     const rawMarkdown = await parseNotionBlocksToRaw(notion, pageId);
 
-    // 2. Refine using Gemini
-    const result = await refineWriteupContent(rawMarkdown, geminiApiKey);
+    // Resolve machine title if not passed
+    let resolvedTitle = pageTitle?.trim();
+    if (!resolvedTitle) {
+      try {
+        const page: any = await notion.pages.retrieve({ page_id: pageId });
+        const titleProp = page.properties?.title || page.properties?.Name;
+        if (titleProp?.title?.[0]?.plain_text) {
+          resolvedTitle = titleProp.title[0].plain_text.trim();
+        }
+      } catch (e) {}
+    }
+
+    // 2. Refine using Gemini with resolved title
+    const result = await refineWriteupContent(rawMarkdown, {
+      customApiKey: geminiApiKey,
+      pageTitle: resolvedTitle,
+    });
 
     return NextResponse.json({
       success: true,
