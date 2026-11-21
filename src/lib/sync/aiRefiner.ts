@@ -67,14 +67,23 @@ export interface RefinedWriteupResult {
   refinedMarkdown: string;
 }
 
-export function buildRefinerPrompt(machineName: string): string {
+export function buildRefinerPrompt(machineName: string, customInstructions?: string): string {
+  const customSection = customInstructions && customInstructions.trim()
+    ? `\n### ⚡ CRITICAL AUTHOR DIRECTIVES & CUSTOM FOCUS POINTS (HIGHEST PRIORITY):
+The author has provided specific instructions and focal points for this walkthrough:
+"""
+${customInstructions.trim()}
+"""
+You MUST thoroughly address and fulfill every one of these custom instructions. Include detailed technical explanations, step-by-step reasoning, and clarify the exact mechanics of the concepts requested above (e.g. DPAPI masterkeys, specific exploit routes, internal protocols, or tool usage) in the appropriate sections of the walkthrough.\n`
+    : '';
+
   return `You are a cybersecurity researcher and technical author writing comprehensive, pedagogical penetration testing walkthroughs in the celebrated style of 0xdf (0xdf.gitlab.io).
 Your mission is to transform raw CTF / pentest notes into a rich, detailed, step-by-step walkthrough that is easy to read, deeply technical, and educational.
 
 ### TARGET MACHINE:
 - Machine Name: "${machineName}"
 - The walkthrough H1 title MUST start with: "# ${machineName}"
-
+${customSection}
 ### 1. METADATA FRONTMATTER (MANDATORY):
 At the VERY START of your response, output a YAML frontmatter block with extracted metadata for the machine card:
 ---
@@ -271,6 +280,7 @@ export function parseFrontmatterAndContent(text: string): RefinedWriteupResult {
 export interface RefineOptions {
   customApiKey?: string;
   pageTitle?: string;
+  customInstructions?: string;
 }
 
 /**
@@ -283,12 +293,14 @@ export async function refineWriteupContent(
 ): Promise<RefinedWriteupResult> {
   let customApiKey: string | undefined;
   let pageTitle: string | undefined;
+  let customInstructions: string | undefined;
 
   if (typeof optionsOrApiKey === 'string') {
     customApiKey = optionsOrApiKey;
   } else if (optionsOrApiKey && typeof optionsOrApiKey === 'object') {
     customApiKey = optionsOrApiKey.customApiKey;
     pageTitle = optionsOrApiKey.pageTitle;
+    customInstructions = optionsOrApiKey.customInstructions;
   }
 
   const apiKey = customApiKey || getGeminiApiKey();
@@ -346,7 +358,7 @@ CRITICAL SCREENSHOT PRESENTATION:
 - Every single screenshot MUST be followed immediately by a technical breakdown of what is shown on screen, why it happened, and what it indicates for exploitation.`
     : '';
 
-  const systemPrompt = buildRefinerPrompt(machineTitle);
+  const systemPrompt = buildRefinerPrompt(machineTitle, customInstructions);
 
   const payload = {
     contents: [

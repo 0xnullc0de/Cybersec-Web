@@ -5,7 +5,7 @@ import {
   Shield, Key, Lock, Unlock, Plus, RefreshCw, Check, Copy, 
   Trash2, ExternalLink, Terminal, AlertTriangle, FileText, 
   Award, Eye, CheckCircle2, Server, Download, Globe, Sparkles, Folder, Edit3,
-  BookOpen, Image as ImageIcon, Upload, X, Wrench, Code2, Loader2
+  BookOpen, Image as ImageIcon, Upload, X, Wrench, Code2, Loader2, MessageSquare
 } from 'lucide-react';
 import Link from 'next/link';
 import MarkdownRenderer from '@/components/writeups/MarkdownRenderer';
@@ -43,6 +43,7 @@ export default function AdminPage() {
   // Import Modal state
   const [selectedNotionPage, setSelectedNotionPage] = useState<any | null>(null);
   const [aiRefining, setAiRefining] = useState(false);
+  const [aiCustomInstructions, setAiCustomInstructions] = useState<string>('');
   const [aiComparison, setAiComparison] = useState<{ raw: string; refined: string } | null>(null);
   const [showAiComparisonModal, setShowAiComparisonModal] = useState(false);
   const [comparisonLeftView, setComparisonLeftView] = useState<'preview' | 'raw'>('preview');
@@ -306,9 +307,10 @@ export default function AdminPage() {
     }
   };
 
-  const handleTriggerAiRefine = async (pageId: string) => {
+  const handleTriggerAiRefine = async (pageId: string, customDirectives?: string) => {
     setAiRefining(true);
     setMessage(null);
+    const instructionsToSend = customDirectives !== undefined ? customDirectives : aiCustomInstructions;
     try {
       const res = await fetch('/api/admin/notion/refine', {
         method: 'POST',
@@ -319,6 +321,7 @@ export default function AdminPage() {
         body: JSON.stringify({ 
           pageId,
           pageTitle: selectedNotionPage?.title || importConfig.title,
+          customInstructions: instructionsToSend?.trim() || undefined,
           geminiApiKey: adminGeminiKey || undefined,
         }),
       });
@@ -2366,6 +2369,35 @@ export default function AdminPage() {
                       className="flex-1 bg-[#040608] border border-[#1b2631] focus:border-[#00ff66]/60 rounded px-2.5 py-1 text-xs font-mono text-[#00ff66] focus:outline-none"
                     />
                   </div>
+
+                  {/* Custom AI Directives / Focus Points */}
+                  <div className="pt-2.5 border-t border-[#1b2631]/60 flex flex-col gap-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-mono text-gray-300 flex items-center gap-1.5 font-bold uppercase tracking-wider">
+                        <MessageSquare className="w-3 h-3 text-[#00ff66]" />
+                        CUSTOM AI INSTRUCTIONS &amp; FOCUS POINTS (OPTIONAL):
+                      </span>
+                      {aiCustomInstructions && (
+                        <button
+                          type="button"
+                          onClick={() => setAiCustomInstructions('')}
+                          className="text-[10px] font-mono text-gray-500 hover:text-red-400 transition-colors cursor-pointer"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                    <textarea
+                      value={aiCustomInstructions}
+                      onChange={(e) => setAiCustomInstructions(e.target.value)}
+                      placeholder="e.g. Explain the DPAPI part in detail, clarify why masterkeys were extracted, explain the kiosk breakout routes and why the scanner broke..."
+                      rows={2}
+                      className="w-full bg-[#040608] border border-[#1b2631] focus:border-[#00ff66]/70 rounded-lg p-2.5 text-xs font-mono text-gray-200 placeholder:text-gray-600 focus:outline-none resize-y transition-all"
+                    />
+                    <p className="text-[10px] font-mono text-gray-500">
+                      💡 Tell Gemini specific techniques, tools, or concepts you want deeply clarified in the walkthrough.
+                    </p>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -2548,6 +2580,44 @@ export default function AdminPage() {
                   className="px-3 py-1.5 rounded-lg bg-[#111923] hover:bg-[#1a2533] border border-[#22313f] text-gray-400 hover:text-white transition-all font-mono text-xs font-bold"
                 >
                   ✕ CLOSE
+                </button>
+              </div>
+
+              {/* Interactive Refinement Instruction Bar */}
+              <div className="px-6 py-2.5 bg-[#060a0d] border-b border-[#1b2631] flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 shrink-0">
+                <div className="flex items-center gap-1.5 shrink-0 text-gray-400 font-mono text-xs">
+                  <MessageSquare className="w-3.5 h-3.5 text-[#00ff66]" />
+                  <span className="font-bold text-gray-300 text-[11px] tracking-wider">AI DIRECTIVES:</span>
+                </div>
+                <input
+                  type="text"
+                  value={aiCustomInstructions}
+                  onChange={(e) => setAiCustomInstructions(e.target.value)}
+                  placeholder="Tell AI what to edit or explain (e.g. Explain the DPAPI part in detail, clarify why masterkeys were extracted...)"
+                  className="flex-1 bg-[#090e13] border border-[#1b2631] focus:border-[#00ff66]/60 rounded-lg px-3 py-1.5 text-xs font-mono text-white placeholder-gray-600 focus:outline-none transition-all"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !aiRefining && selectedNotionPage) {
+                      handleTriggerAiRefine(selectedNotionPage.id, aiCustomInstructions);
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  disabled={aiRefining || !selectedNotionPage}
+                  onClick={() => selectedNotionPage && handleTriggerAiRefine(selectedNotionPage.id, aiCustomInstructions)}
+                  className="px-3.5 py-1.5 bg-[#00ff66] hover:bg-[#00ff66]/90 disabled:opacity-50 text-black text-xs font-mono font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 shrink-0 cursor-pointer shadow-[0_0_12px_rgba(0,255,102,0.2)]"
+                >
+                  {aiRefining ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      REFINING...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-3.5 h-3.5" />
+                      ⚡ RE-REFINE
+                    </>
+                  )}
                 </button>
               </div>
 

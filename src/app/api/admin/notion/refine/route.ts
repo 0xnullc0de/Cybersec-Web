@@ -21,7 +21,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { pageId, geminiApiKey, pageTitle } = body;
+    const { pageId, geminiApiKey, pageTitle, customInstructions } = body;
 
     if (!pageId) {
       return NextResponse.json({ error: 'pageId is required' }, { status: 400 });
@@ -49,10 +49,11 @@ export async function POST(request: Request) {
       } catch (e) {}
     }
 
-    // 2. Refine using Gemini with resolved title
+    // 2. Refine using Gemini with resolved title and optional custom instructions
     const result = await refineWriteupContent(rawMarkdown, {
       customApiKey: geminiApiKey,
       pageTitle: resolvedTitle,
+      customInstructions: typeof customInstructions === 'string' ? customInstructions.trim() : undefined,
     });
 
     return NextResponse.json({
