@@ -55,7 +55,9 @@ export interface TilNote {
   readTime: string;
   summary: string;
   content: string;
+  isLocked?: boolean;
   imageUrls?: string[];
+  notionPageId?: string;
 }
 
 export type ToolCategory =

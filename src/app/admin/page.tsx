@@ -49,6 +49,29 @@ export default function AdminPage() {
   const [comparisonLeftView, setComparisonLeftView] = useState<'preview' | 'raw'>('preview');
   const [comparisonRightView, setComparisonRightView] = useState<'preview' | 'edit'>('preview');
   const [adminGeminiKey, setAdminGeminiKey] = useState<string>('');
+
+  // Notion Notes Hub state (Separate workspace for TIL / Field Notes)
+  const [notionNotesStatus, setNotionNotesStatus] = useState<any>(null);
+  const [notionNotesPages, setNotionNotesPages] = useState<any[]>([]);
+  const [notionNotesCustomKey, setNotionNotesCustomKey] = useState<string>('');
+  const [selectedNotionNotePage, setSelectedNotionNotePage] = useState<any | null>(null);
+  const [noteImportConfig, setNoteImportConfig] = useState({
+    title: '',
+    slug: '',
+    category: 'Active Directory',
+    tags: '',
+    readTime: '3 min read',
+    summary: '',
+    content: '',
+    isLocked: false,
+    unlockPassword: '',
+  });
+  const [isNoteRefining, setIsNoteRefining] = useState(false);
+  const [noteAiComparison, setNoteAiComparison] = useState<{ raw: string; refined: string } | null>(null);
+  const [showNoteAiModal, setShowNoteAiModal] = useState(false);
+  const [noteCustomDirectives, setNoteCustomDirectives] = useState<string>('');
+  const [showNotionNotesHub, setShowNotionNotesHub] = useState(false);
+
   const [importConfig, setImportConfig] = useState({
     title: '',
     isProLab: false,
@@ -89,6 +112,8 @@ export default function AdminPage() {
     readTime: '3 min read',
     summary: '',
     content: '',
+    isLocked: false,
+    unlockPassword: '',
   });
 
   // Security Tool form state
@@ -134,6 +159,10 @@ export default function AdminPage() {
     if (savedGemini) {
       setAdminGeminiKey(savedGemini);
     }
+    const savedNotesKey = localStorage.getItem('notion_notes_api_key');
+    if (savedNotesKey) {
+      setNotionNotesCustomKey(savedNotesKey);
+    }
   }, []);
 
   const checkAuth = async (key: string) => {
@@ -158,6 +187,30 @@ export default function AdminPage() {
     }
   };
 
+  const fetchNotionNotes = async (key: string, customToken?: string) => {
+    try {
+      const headers: Record<string, string> = { 'x-admin-key': key };
+      const token = customToken !== undefined ? customToken : (notionNotesCustomKey || localStorage.getItem('notion_notes_api_key') || '');
+      if (token) {
+        headers['x-notion-notes-key'] = token;
+      }
+
+      const sRes = await fetch('/api/admin/notion-notes/status', { headers });
+      if (sRes.ok) {
+        const sData = await sRes.json();
+        setNotionNotesStatus(sData);
+      }
+
+      const pRes = await fetch('/api/admin/notion-notes/pages', { headers });
+      if (pRes.ok) {
+        const pData = await pRes.json();
+        setNotionNotesPages(pData.pages || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch Notion Notes:', err);
+    }
+  };
+
   const fetchData = async (key: string) => {
     setLoading(true);
     try {
@@ -177,8 +230,10 @@ export default function AdminPage() {
         setCerts(cData || []);
       }
 
-      // Fetch technique notes
-      const tRes = await fetch('/api/til');
+      // Fetch technique notes (admin view with full data including unlock passwords)
+      const tRes = await fetch('/api/admin/til', {
+        headers: { 'x-admin-key': key },
+      });
       if (tRes.ok) {
         const tData = await tRes.json();
         setNotes(tData || []);
@@ -205,6 +260,9 @@ export default function AdminPage() {
         const pData = await pRes.json();
         setNotionPages(pData.pages || []);
       }
+
+      // Fetch Notion Notes (separate workspace)
+      await fetchNotionNotes(key);
     } catch (e) {
       console.error(e);
     } finally {
@@ -359,6 +417,103 @@ export default function AdminPage() {
     }
   };
 
+  const handleTriggerNoteAiRefine = async (pageId: string, customDirectives?: string) => {
+    setIsNoteRefining(true);
+    setMessage(null);
+    try {
+      const token = notionNotesCustomKey || localStorage.getItem('notion_notes_api_key') || undefined;
+      const res = await fetch('/api/admin/notion-notes/refine', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-key': adminKey,
+        },
+        body: JSON.stringify({
+          pageId,
+          pageTitle: selectedNotionNotePage?.title || noteImportConfig.title,
+          customInstructions: customDirectives !== undefined ? customDirectives : noteCustomDirectives,
+          isLocked: noteImportConfig.isLocked,
+          geminiApiKey: adminGeminiKey || undefined,
+          notionToken: token,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setNoteAiComparison({
+          raw: data.rawMarkdown,
+          refined: data.refinedMarkdown,
+        });
+        setNoteImportConfig((prev) => ({
+          ...prev,
+          title: data.metadata?.title || prev.title,
+          category: data.metadata?.category || prev.category,
+          tags: data.metadata?.tags || prev.tags,
+          readTime: data.metadata?.readTime || prev.readTime,
+          summary: data.metadata?.summary || prev.summary,
+          content: data.refinedMarkdown,
+        }));
+        setShowNoteAiModal(true);
+      } else {
+        setMessage({ type: 'error', text: data.error || 'Failed to refine note with AI' });
+      }
+    } catch (e: any) {
+      setMessage({ type: 'error', text: e.message });
+    } finally {
+      setIsNoteRefining(false);
+    }
+  };
+
+  const handleImportNotionNote = async () => {
+    if (!selectedNotionNotePage) return;
+    setLoading(true);
+    setMessage(null);
+    try {
+      const token = notionNotesCustomKey || localStorage.getItem('notion_notes_api_key') || undefined;
+      const res = await fetch('/api/admin/notion-notes/import', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-key': adminKey,
+        },
+        body: JSON.stringify({
+          pageId: selectedNotionNotePage.id,
+          overrides: {
+            title: noteImportConfig.title,
+            slug: noteImportConfig.slug || undefined,
+            category: noteImportConfig.category,
+            tags: noteImportConfig.tags,
+            readTime: noteImportConfig.readTime,
+            summary: noteImportConfig.summary,
+            content: noteImportConfig.content || undefined,
+            isLocked: noteImportConfig.isLocked,
+            unlockPassword: noteImportConfig.isLocked ? noteImportConfig.unlockPassword : '',
+          },
+          notionToken: token,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setMessage({
+          type: 'success',
+          text: `Successfully imported "${noteImportConfig.title}" from Notion Notes! (${data.imagesRehosted || 0} GIFs/images re-hosted).`,
+        });
+        setSelectedNotionNotePage(null);
+        setShowNoteAiModal(false);
+        fetchData(adminKey);
+        fetchNotionNotes(adminKey);
+        setActiveTab('notes');
+      } else {
+        setMessage({ type: 'error', text: data.error || 'Import failed' });
+      }
+    } catch (e: any) {
+      setMessage({ type: 'error', text: e.message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleUpdateWriteup = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingWriteup) return;
@@ -506,6 +661,8 @@ export default function AdminPage() {
         body: JSON.stringify({
           ...newNote,
           tags: newNote.tags.split(',').map((t) => t.trim()).filter(Boolean),
+          isLocked: newNote.isLocked,
+          unlockPassword: newNote.isLocked ? newNote.unlockPassword : undefined,
         }),
       });
       if (res.ok) {
@@ -519,6 +676,8 @@ export default function AdminPage() {
           readTime: '3 min read',
           summary: '',
           content: '',
+          isLocked: false,
+          unlockPassword: '',
         });
         fetchData(adminKey);
       } else {
@@ -540,8 +699,15 @@ export default function AdminPage() {
     try {
       const res = await fetch(`/api/til/${editingNote.id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(editingNote),
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-key': adminKey,
+        },
+        body: JSON.stringify({
+          ...editingNote,
+          isLocked: editingNote.isLocked,
+          unlockPassword: editingNote.isLocked ? editingNote.unlockPassword : '',
+        }),
       });
       if (res.ok) {
         setMessage({ type: 'success', text: `Note "${editingNote.title}" updated successfully!` });
@@ -562,7 +728,10 @@ export default function AdminPage() {
     if (!confirm(`Delete technique note "${title}"?`)) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/til/${id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/til/${id}`, {
+        method: 'DELETE',
+        headers: { 'x-admin-key': adminKey },
+      });
       if (res.ok) {
         setMessage({ type: 'success', text: `Deleted note "${title}"` });
         fetchData(adminKey);
@@ -1097,6 +1266,88 @@ export default function AdminPage() {
                 ))}
               </div>
             </div>
+
+            {/* Section C: Locked TIL Vault Notes */}
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-1.5 rounded bg-amber-500/10 border border-amber-500/30">
+                    <BookOpen className="w-4 h-4 text-amber-400" />
+                  </div>
+                  <div>
+                    <h2 className="text-base font-mono font-bold text-white">LOCKED TIL VAULT NOTES</h2>
+                    <p className="text-xs font-mono text-gray-400">
+                      Passphrase-protected technique notes and red team field intel.
+                    </p>
+                  </div>
+                </div>
+                <span className="text-xs font-mono text-amber-400 font-bold px-2.5 py-1 rounded bg-amber-500/10 border border-amber-500/30">
+                  {notes.filter((n: any) => n.isLocked).length} LOCKED
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {notes.filter((n: any) => n.isLocked).map((n: any) => (
+                  <div key={n.id} className="bg-[#0a0f14] border border-amber-500/30 rounded-xl p-5 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between mb-2.5">
+                        <span className="px-2 py-0.5 text-[10px] font-mono font-bold rounded bg-amber-500/15 text-amber-400 border border-amber-500/40 uppercase">
+                          VAULT NOTE
+                        </span>
+                        <span className="text-xs font-mono text-gray-400">{n.category} • {n.date}</span>
+                      </div>
+
+                      <h3 className="text-base font-mono font-bold text-white mb-1 flex items-center gap-2">
+                        <Lock className="w-4 h-4 text-amber-400 shrink-0" />
+                        {n.title}
+                      </h3>
+                      <p className="text-xs text-gray-400 font-mono mb-4">{n.summary}</p>
+
+                      <div className="bg-[#050708] border border-[#1b2631] rounded-lg p-3 mb-4">
+                        <div className="text-[10px] font-mono text-gray-400 uppercase tracking-wider mb-1">
+                          Vault Note Passphrase:
+                        </div>
+                        <div className="font-mono text-xs text-amber-400 break-all select-all font-semibold">
+                          {n.unlockPassword || '(Password set in database)'}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 pt-3 border-t border-[#1b2631]">
+                      <button
+                        onClick={() => handleCopyPassword(n.id, n.unlockPassword || '')}
+                        disabled={!n.unlockPassword}
+                        className="flex-1 py-2 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/40 text-amber-300 font-mono text-xs rounded-lg flex items-center justify-center gap-1.5 transition-all font-semibold"
+                      >
+                        {copiedSlug === n.id ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                        {copiedSlug === n.id ? 'COPIED TO CLIPBOARD!' : 'COPY PASSPHRASE'}
+                      </button>
+
+                      <Link
+                        href={`/til#${n.slug}`}
+                        target="_blank"
+                        className="px-3 py-2 bg-[#0e141a] hover:bg-[#1b2631] border border-[#1b2631] text-gray-300 hover:text-white font-mono text-xs rounded-lg transition-all"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                      </Link>
+                    </div>
+                  </div>
+                ))}
+
+                {notes.filter((n: any) => n.isLocked).length === 0 && (
+                  <div className="col-span-2 text-center py-10 bg-[#0a0f14] border border-[#1b2631] rounded-xl">
+                    <Lock className="w-8 h-8 text-amber-400 mx-auto mb-2 opacity-50" />
+                    <p className="text-sm font-mono text-gray-400">No locked vault notes yet.</p>
+                    <button
+                      onClick={() => setActiveTab('notes')}
+                      className="mt-3 px-4 py-1.5 bg-amber-500/15 border border-amber-500/30 text-amber-400 font-mono text-xs rounded hover:bg-amber-500/25 transition-all"
+                    >
+                      + Add Locked Technique Note
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         )}
 
@@ -1618,6 +1869,142 @@ export default function AdminPage() {
         {/* ========================================================================= */}
         {activeTab === 'notes' && (
           <div className="space-y-8 max-w-5xl">
+            {/* Notion Notes Workspace Hub & Quick Import Bar */}
+            <div className="bg-[#0a0f14] border border-cyan-500/30 rounded-xl p-5 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-cyan-400">
+                    <RefreshCw className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h2 className="font-mono text-sm font-bold text-white flex items-center gap-2">
+                      <span>NOTION NOTES WORKSPACE</span>
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">
+                        {notionNotesStatus?.workspace || 'FIELD NOTES'}
+                      </span>
+                    </h2>
+                    <p className="text-xs text-gray-400 font-mono mt-0.5">
+                      Separate Notion workspace dedicated to offensive techniques, evasion notes, and field writeups.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => fetchNotionNotes(adminKey)}
+                    className="px-3.5 py-1.5 bg-[#121921] hover:bg-cyan-500/15 border border-[#22313f] hover:border-cyan-500/40 text-cyan-400 text-xs font-mono rounded-lg transition-all flex items-center gap-1.5"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+                    Refresh Notes
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowNotionNotesHub(!showNotionNotesHub)}
+                    className="px-3.5 py-1.5 bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/40 text-cyan-300 text-xs font-mono font-bold rounded-lg transition-all flex items-center gap-1.5"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    {showNotionNotesHub ? 'Hide Pages' : `Import Notion Notes (${notionNotesPages.length})`}
+                  </button>
+                </div>
+              </div>
+
+              {/* Notion Notes Custom Token bar (Optional) */}
+              <div className="pt-2 border-t border-[#17222c] flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 text-xs font-mono">
+                <span className="text-gray-400">
+                  Integration: <strong className="text-white">{notionNotesStatus?.bot || 'notes-integration'}</strong>
+                </span>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="password"
+                    value={notionNotesCustomKey}
+                    onChange={(e) => {
+                      setNotionNotesCustomKey(e.target.value);
+                      localStorage.setItem('notion_notes_api_key', e.target.value);
+                    }}
+                    placeholder="Custom Notion Notes API Key (optional)"
+                    className="bg-[#06090c] border border-[#1b2631] rounded px-2.5 py-1 text-xs font-mono text-white placeholder-gray-600 focus:outline-none focus:border-cyan-400"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fetchNotionNotes(adminKey, notionNotesCustomKey)}
+                    className="px-2.5 py-1 bg-cyan-500/20 text-cyan-300 rounded border border-cyan-500/30 hover:bg-cyan-500/30"
+                  >
+                    Connect
+                  </button>
+                </div>
+              </div>
+
+              {/* Expandable Discovered Pages List */}
+              {showNotionNotesHub && (
+                <div className="pt-3 border-t border-[#17222c] space-y-3">
+                  <div className="text-xs font-mono text-gray-400 uppercase tracking-wider flex items-center justify-between">
+                    <span>Discovered Pages in Notes Workspace ({notionNotesPages.length})</span>
+                    <span className="text-gray-500 text-[11px]">Select a page to configure lock, AI refinement &amp; GIFs</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {notionNotesPages.map((page) => (
+                      <div
+                        key={page.id}
+                        className="p-3.5 rounded-xl bg-[#070b0e] border border-[#1b2631] hover:border-cyan-500/40 flex items-start justify-between gap-3 transition-all"
+                      >
+                        <div className="min-w-0 space-y-1">
+                          <h4 className="font-mono text-xs font-bold text-white truncate">{page.title}</h4>
+                          <div className="flex items-center gap-2 text-[10px] font-mono text-gray-400">
+                            <span className="px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                              {page.category || 'Active Directory'}
+                            </span>
+                            <span>{page.lastEditedTime ? new Date(page.lastEditedTime).toLocaleDateString() : ''}</span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedNotionNotePage(page);
+                              setNoteImportConfig({
+                                title: page.title,
+                                slug: (page.title || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
+                                category: page.category || 'Active Directory',
+                                tags: page.category || 'Active Directory, CTF',
+                                readTime: '4 min read',
+                                summary: `${page.title} offensive tradecraft notes and technique breakdown.`,
+                                content: '',
+                                isLocked: false,
+                                unlockPassword: `VAULT{${(page.title || 'Note').replace(/[^a-zA-Z0-9]/g, '')}_${Math.random().toString(16).substring(2, 8).toUpperCase()}!}`,
+                              });
+                            }}
+                            className="px-3 py-1.5 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/30 text-cyan-400 text-xs font-mono font-bold transition-all flex items-center gap-1"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                            Import
+                          </button>
+                          <a
+                            href={page.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-1.5 rounded-lg bg-[#0e141a] hover:bg-[#1b2631] border border-[#1b2631] text-gray-400 hover:text-white transition-all"
+                            title="Open in Notion"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </a>
+                        </div>
+                      </div>
+                    ))}
+
+                    {notionNotesPages.length === 0 && (
+                      <div className="col-span-2 text-center py-8 rounded-lg bg-[#070b0e] border border-[#1b2631] text-gray-400 text-xs font-mono space-y-1">
+                        <p>No pages discovered in Notion Notes workspace yet.</p>
+                        <p className="text-gray-500 text-[11px]">Make sure your Notion integration has access to your notes pages or folders.</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Add Note Form */}
             <div className="bg-[#0a0f14] border border-[#1b2631] rounded-xl p-6">
               <h2 className="text-base font-mono font-bold text-cyan-400 mb-4 flex items-center gap-2">
@@ -1750,6 +2137,65 @@ export default function AdminPage() {
                   </p>
                 </div>
 
+                {/* Vault Lock Toggle + Passphrase */}
+                <div className={`p-4 rounded-xl border space-y-3 transition-all ${newNote.isLocked ? 'bg-amber-500/5 border-amber-500/40' : 'bg-[#050708] border-[#1b2631]'}`}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <Lock className={`w-4 h-4 ${newNote.isLocked ? 'text-amber-400' : 'text-gray-500'}`} />
+                      <div>
+                        <span className="font-mono text-xs font-bold text-white block">LOCK AS VAULT NOTE?</span>
+                        <span className="text-[11px] font-mono text-gray-400">
+                          Vault notes require a passphrase to view full content. Title, category, and summary remain visible.
+                        </span>
+                      </div>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={newNote.isLocked}
+                      onChange={(e) => {
+                        const locked = e.target.checked;
+                        setNewNote(prev => ({
+                          ...prev,
+                          isLocked: locked,
+                          unlockPassword: locked && !prev.unlockPassword
+                            ? `VAULT{${(prev.title || 'Note').replace(/[^a-zA-Z0-9]/g, '')}_${Math.random().toString(16).substring(2, 8).toUpperCase()}!}`
+                            : locked ? prev.unlockPassword : '',
+                        }));
+                      }}
+                      className="w-5 h-5 accent-amber-500 rounded cursor-pointer"
+                    />
+                  </div>
+
+                  {newNote.isLocked && (
+                    <div className="flex flex-col sm:flex-row gap-2.5">
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="text-xs font-mono text-amber-400 uppercase font-bold">
+                            Vault Passphrase:
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => setNewNote(prev => ({
+                              ...prev,
+                              unlockPassword: `VAULT{${(prev.title || 'Note').replace(/[^a-zA-Z0-9]/g, '')}_${Math.random().toString(16).substring(2, 8).toUpperCase()}!}`,
+                            }))}
+                            className="text-[11px] font-mono text-amber-400 hover:underline flex items-center gap-1"
+                          >
+                            <Sparkles className="w-3 h-3" /> Regenerate
+                          </button>
+                        </div>
+                        <input
+                          type="text"
+                          value={newNote.unlockPassword}
+                          onChange={(e) => setNewNote({ ...newNote, unlockPassword: e.target.value })}
+                          placeholder="Enter or auto-generate a vault passphrase"
+                          className="w-full bg-[#050708] border border-amber-500/40 rounded-lg px-3 py-2 text-sm font-mono text-amber-400 focus:border-amber-400 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 <button
                   type="submit"
                   disabled={loading}
@@ -1767,16 +2213,42 @@ export default function AdminPage() {
               </div>
               <div className="grid grid-cols-1 gap-3">
                 {notes.map((note) => (
-                  <div key={note.id} className="bg-[#0a0f14] border border-[#1b2631] hover:border-cyan-500/40 rounded-xl p-5 flex items-start justify-between gap-4 transition-all">
+                  <div key={note.id} className={`bg-[#0a0f14] border rounded-xl p-5 flex items-start justify-between gap-4 transition-all ${
+                    note.isLocked ? 'border-amber-500/30 hover:border-amber-500/60' : 'border-[#1b2631] hover:border-cyan-500/40'
+                  }`}>
                     <div className="space-y-1.5 flex-1 min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="font-mono text-sm font-bold text-white">{note.title}</span>
+                        {note.isLocked && (
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded font-bold uppercase bg-amber-500/10 text-amber-400 border border-amber-500/30 flex items-center gap-1">
+                            <Lock className="w-3 h-3 text-amber-400" />
+                            VAULT LOCKED
+                          </span>
+                        )}
                         <span className="text-[10px] font-mono px-2 py-0.5 rounded font-bold uppercase bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">
                           {note.category}
                         </span>
                         <span className="text-[10px] font-mono text-gray-500">{note.readTime || '3 min'}</span>
                       </div>
                       <p className="text-xs font-mono text-gray-400 line-clamp-2">{note.summary}</p>
+                      
+                      {note.isLocked && note.unlockPassword && (
+                        <div className="flex items-center gap-2 pt-1 text-xs font-mono">
+                          <span className="text-gray-500 text-[11px]">Passphrase:</span>
+                          <code className="text-[11px] text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20 select-all font-semibold">
+                            {note.unlockPassword}
+                          </code>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyPassword(note.id, note.unlockPassword)}
+                            className="p-1 text-gray-400 hover:text-white transition-colors"
+                            title="Copy passphrase"
+                          >
+                            {copiedSlug === note.id ? <Check className="w-3.5 h-3.5 text-[#00ff66]" /> : <Copy className="w-3.5 h-3.5" />}
+                          </button>
+                        </div>
+                      )}
+
                       <div className="flex flex-wrap gap-1.5 pt-1">
                         {note.tags?.map((t: string) => (
                           <span key={t} className="text-[10px] font-mono text-gray-500 bg-[#050708] px-2 py-0.5 rounded border border-[#1b2631]">
@@ -1787,6 +2259,14 @@ export default function AdminPage() {
                     </div>
 
                     <div className="flex items-center gap-2 shrink-0">
+                      <Link
+                        href={`/til#${note.slug}`}
+                        target="_blank"
+                        className="p-2 text-gray-400 hover:text-white transition-colors rounded-lg hover:bg-[#1b2631]"
+                        title="View on site"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </Link>
                       <button
                         onClick={() => setEditingNote(note)}
                         className="p-2 text-gray-400 hover:text-cyan-400 transition-colors rounded-lg hover:bg-cyan-500/10"
@@ -2790,6 +3270,376 @@ export default function AdminPage() {
         )}
 
         {/* ========================================================================= */}
+        {/* MODAL: SELECTIVE NOTION NOTE IMPORT                                       */}
+        {/* ========================================================================= */}
+        {selectedNotionNotePage && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="w-full max-w-xl max-h-[90vh] overflow-y-auto bg-[#0a0f14] border border-cyan-500/40 rounded-2xl p-6 shadow-2xl space-y-5">
+              <div className="flex items-center justify-between border-b border-[#1b2631] pb-3">
+                <div className="flex items-center gap-2.5">
+                  <Download className="w-5 h-5 text-cyan-400" />
+                  <h3 className="font-mono text-base font-bold text-white">
+                    IMPORT NOTE FROM NOTION WORKSPACE
+                  </h3>
+                </div>
+                <button 
+                  onClick={() => setSelectedNotionNotePage(null)}
+                  className="text-gray-500 hover:text-white text-xs font-mono font-bold"
+                >
+                  ✕ CLOSE
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {/* Vault Lock Toggle */}
+                <div className={`p-3.5 rounded-xl border flex items-center justify-between transition-all ${
+                  noteImportConfig.isLocked ? 'bg-amber-500/10 border-amber-500/40' : 'bg-[#050708] border-[#1b2631]'
+                }`}>
+                  <div>
+                    <span className="font-mono text-xs font-bold text-white flex items-center gap-1.5">
+                      <Lock className={`w-3.5 h-3.5 ${noteImportConfig.isLocked ? 'text-amber-400' : 'text-gray-400'}`} />
+                      LOCK IN CONFIDENTIAL VAULT?
+                    </span>
+                    <span className="text-[11px] font-mono text-gray-400 block mt-0.5">
+                      Vault notes require a passphrase to view full content. Title and summary remain visible.
+                    </span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={noteImportConfig.isLocked}
+                    onChange={(e) => {
+                      const locked = e.target.checked;
+                      setNoteImportConfig(prev => ({
+                        ...prev,
+                        isLocked: locked,
+                        unlockPassword: locked && !prev.unlockPassword
+                          ? `VAULT{${(prev.title || 'Note').replace(/[^a-zA-Z0-9]/g, '')}_${Math.random().toString(16).substring(2, 8).toUpperCase()}!}`
+                          : locked ? prev.unlockPassword : '',
+                      }));
+                    }}
+                    className="w-5 h-5 accent-amber-500 rounded cursor-pointer"
+                  />
+                </div>
+
+                {/* Passphrase field if locked */}
+                {noteImportConfig.isLocked && (
+                  <div className="bg-[#050708] border border-amber-500/40 rounded-xl p-3.5 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-mono text-amber-400 uppercase font-bold flex items-center gap-1.5">
+                        <Key className="w-3.5 h-3.5" /> Vault Unlock Passphrase:
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setNoteImportConfig(prev => ({
+                          ...prev,
+                          unlockPassword: `VAULT{${(prev.title || 'Note').replace(/[^a-zA-Z0-9]/g, '')}_${Math.random().toString(16).substring(2, 8).toUpperCase()}!}`,
+                        }))}
+                        className="text-[11px] font-mono text-amber-400 hover:underline flex items-center gap-1"
+                      >
+                        <Sparkles className="w-3 h-3" /> Regenerate Passphrase
+                      </button>
+                    </div>
+                    <input
+                      type="text"
+                      value={noteImportConfig.unlockPassword}
+                      onChange={(e) => setNoteImportConfig({ ...noteImportConfig, unlockPassword: e.target.value })}
+                      className="w-full bg-[#080d12] border border-amber-500/40 rounded-lg px-3 py-2 text-sm font-mono text-amber-400 focus:border-amber-400 focus:outline-none"
+                    />
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-mono text-gray-400 uppercase mb-1">Technique Title</label>
+                  <input
+                    type="text"
+                    value={noteImportConfig.title}
+                    onChange={(e) => setNoteImportConfig({ ...noteImportConfig, title: e.target.value })}
+                    className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-2 text-sm font-mono text-white focus:border-cyan-400 focus:outline-none"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-mono text-gray-400 uppercase mb-1">Slug</label>
+                    <input
+                      type="text"
+                      value={noteImportConfig.slug}
+                      onChange={(e) => setNoteImportConfig({ ...noteImportConfig, slug: e.target.value })}
+                      className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-2 text-sm font-mono text-white focus:border-cyan-400 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-mono text-gray-400 uppercase mb-1">Category</label>
+                    <input
+                      type="text"
+                      value={noteImportConfig.category}
+                      onChange={(e) => setNoteImportConfig({ ...noteImportConfig, category: e.target.value })}
+                      className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-2 text-sm font-mono text-white focus:border-cyan-400 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-mono text-gray-400 uppercase mb-1">Tags (Comma-separated)</label>
+                    <input
+                      type="text"
+                      value={noteImportConfig.tags}
+                      onChange={(e) => setNoteImportConfig({ ...noteImportConfig, tags: e.target.value })}
+                      className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-2 text-sm font-mono text-white focus:border-cyan-400 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-mono text-gray-400 uppercase mb-1">Read Time</label>
+                    <input
+                      type="text"
+                      value={noteImportConfig.readTime}
+                      onChange={(e) => setNoteImportConfig({ ...noteImportConfig, readTime: e.target.value })}
+                      className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-2 text-sm font-mono text-white focus:border-cyan-400 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-mono text-gray-400 uppercase mb-1">Summary / Teaser</label>
+                  <textarea
+                    rows={2}
+                    value={noteImportConfig.summary}
+                    onChange={(e) => setNoteImportConfig({ ...noteImportConfig, summary: e.target.value })}
+                    className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-2 text-xs font-mono text-white focus:border-cyan-400 focus:outline-none"
+                  />
+                </div>
+
+                {/* AI Note Refiner Section */}
+                <div className="p-4 rounded-xl bg-[#09110d] border border-cyan-500/40 flex flex-col gap-3 shadow-[0_0_15px_rgba(6,182,212,0.1)]">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-cyan-400" />
+                        <span className="font-mono text-xs font-bold text-white">AI NOTE REFINER (GIFS &amp; MENTOR INTEL)</span>
+                        {noteImportConfig.content ? (
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded font-bold bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 flex items-center gap-1">
+                            <Check className="w-3 h-3" /> REFINED CONTENT READY
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded font-bold bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">
+                            GEMINI FLASH
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] font-mono text-gray-400 mt-1">
+                        Keeps all animated GIFs &amp; images intact, adopts an engaging offensive mentor voice, and delivers deep technical internals without truncation.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={isNoteRefining}
+                      onClick={() => handleTriggerNoteAiRefine(selectedNotionNotePage.id)}
+                      className="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-black text-xs font-mono font-bold rounded-lg transition-all flex items-center justify-center gap-2 shrink-0 cursor-pointer shadow-[0_0_15px_rgba(6,182,212,0.25)]"
+                    >
+                      {isNoteRefining ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          REFINING NOTE...
+                        </>
+                      ) : noteImportConfig.content ? (
+                        <>
+                          <Eye className="w-3.5 h-3.5" />
+                          VIEW REFINED NOTE
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-3.5 h-3.5" />
+                          ⚡ REFINE &amp; PRESERVE GIFS
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  <div className="pt-2 border-t border-[#1b2631]">
+                    <label className="block text-[11px] font-mono text-gray-400 mb-1">
+                      Directives for AI (Optional):
+                    </label>
+                    <input
+                      type="text"
+                      value={noteCustomDirectives}
+                      onChange={(e) => setNoteCustomDirectives(e.target.value)}
+                      placeholder="e.g. Explain the DPAPI master key decryption step in extra detail, emphasize LOLBAS execution..."
+                      className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-1.5 text-xs font-mono text-white placeholder-gray-600 focus:border-cyan-400 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Content Editor */}
+                <div>
+                  <label className="block text-xs font-mono text-gray-400 uppercase mb-1">
+                    Content (Markdown)
+                  </label>
+                  <textarea
+                    rows={8}
+                    value={noteImportConfig.content}
+                    onChange={(e) => setNoteImportConfig({ ...noteImportConfig, content: e.target.value })}
+                    placeholder="Leave blank to import raw blocks from Notion, or click Refine with AI..."
+                    className="w-full bg-[#050708] border border-[#1b2631] rounded-lg p-3 text-xs font-mono text-white focus:border-cyan-400 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-[#1b2631] flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setSelectedNotionNotePage(null)}
+                  className="px-4 py-2 bg-[#0e141a] border border-[#1b2631] text-xs font-mono rounded-lg text-gray-400 hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleImportNotionNote}
+                  disabled={loading}
+                  className="px-5 py-2 bg-cyan-500 text-black font-mono font-bold text-xs rounded-lg hover:bg-cyan-400 transition-all flex items-center gap-2"
+                >
+                  {loading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                  IMPORT NOTE &amp; REHOST GIFS
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* MODAL: AI NOTE REFINER COMPARISON (GIFs & Mentor Style)                   */}
+        {/* ========================================================================= */}
+        {showNoteAiModal && noteAiComparison && (
+          <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[60] flex items-center justify-center p-2 sm:p-6">
+            <div className="w-full max-w-7xl h-[92vh] flex flex-col bg-[#070b0e] border border-cyan-500/50 rounded-2xl shadow-[0_0_50px_rgba(6,182,212,0.15)] overflow-hidden">
+              {/* Top Bar */}
+              <div className="px-6 py-4 bg-[#0a1015] border-b border-[#1b2631] flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-cyan-400">
+                    <Sparkles className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-mono text-base font-bold text-white tracking-wide">
+                        AI NOTE REFINER // RAW VS ENJOYABLE TECHNICAL BREAKDOWN
+                      </h3>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded font-bold bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">
+                        GIFS PRESERVED
+                      </span>
+                    </div>
+                    <p className="text-xs font-mono text-gray-400 mt-0.5">
+                      Note: <span className="text-white font-bold">{noteImportConfig.title}</span> • Engaging senior red team mentor style, unabridged technical tradecraft.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setShowNoteAiModal(false)}
+                  className="px-3 py-1.5 rounded-lg bg-[#111923] hover:bg-[#1a2533] border border-[#22313f] text-gray-400 hover:text-white transition-all font-mono text-xs font-bold"
+                >
+                  ✕ CLOSE
+                </button>
+              </div>
+
+              {/* Directives Re-Refine Bar */}
+              <div className="px-6 py-2.5 bg-[#060a0d] border-b border-[#1b2631] flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 shrink-0">
+                <div className="flex items-center gap-1.5 shrink-0 text-gray-400 font-mono text-xs">
+                  <MessageSquare className="w-3.5 h-3.5 text-cyan-400" />
+                  <span className="font-bold text-gray-300 text-[11px] tracking-wider">AI NOTE DIRECTIVES:</span>
+                </div>
+                <input
+                  type="text"
+                  value={noteCustomDirectives}
+                  onChange={(e) => setNoteCustomDirectives(e.target.value)}
+                  placeholder="Tell AI what to edit or explain (e.g. explain the DPAPI part in detail, emphasize LOLBAS execution...)"
+                  className="flex-1 bg-[#090e13] border border-[#1b2631] focus:border-cyan-400/60 rounded-lg px-3 py-1.5 text-xs font-mono text-white placeholder-gray-600 focus:outline-none transition-all"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !isNoteRefining && selectedNotionNotePage) {
+                      handleTriggerNoteAiRefine(selectedNotionNotePage.id, noteCustomDirectives);
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  disabled={isNoteRefining || !selectedNotionNotePage}
+                  onClick={() => selectedNotionNotePage && handleTriggerNoteAiRefine(selectedNotionNotePage.id, noteCustomDirectives)}
+                  className="px-4 py-1.5 bg-cyan-500 hover:bg-cyan-400 text-black text-xs font-mono font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 shrink-0"
+                >
+                  {isNoteRefining ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                  RE-REFINE
+                </button>
+              </div>
+
+              {/* Side-by-side Panels */}
+              <div className="flex-1 grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-[#1b2631] overflow-hidden">
+                {/* Left Panel: Raw Notion Content */}
+                <div className="flex flex-col h-full overflow-hidden bg-[#05070a]">
+                  <div className="px-4 py-2 bg-[#090e13] border-b border-[#1b2631] text-xs font-mono font-bold text-gray-400 flex items-center justify-between">
+                    <span>RAW NOTION CONTENT</span>
+                  </div>
+                  <div className="flex-1 p-5 overflow-y-auto font-mono text-xs text-gray-400 whitespace-pre-wrap select-text">
+                    {noteAiComparison.raw}
+                  </div>
+                </div>
+
+                {/* Right Panel: AI Refined Note */}
+                <div className="flex flex-col h-full overflow-hidden bg-[#070b0e]">
+                  <div className="px-4 py-2 bg-[#090e13] border-b border-[#1b2631] text-xs font-mono font-bold text-cyan-400 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5" /> REFINED TECHNICAL NOTE &bull; PREVIEW
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(noteImportConfig.content || noteAiComparison.refined);
+                        alert('Refined note copied to clipboard!');
+                      }}
+                      className="px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 text-[10px] hover:bg-cyan-500/20"
+                    >
+                      Copy Markdown
+                    </button>
+                  </div>
+                  <div className="flex-1 p-5 overflow-y-auto select-text">
+                    <MarkdownRenderer content={noteImportConfig.content || noteAiComparison.refined} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="px-6 py-3.5 bg-[#0a1015] border-t border-[#1b2631] flex items-center justify-between shrink-0">
+                <span className="text-xs font-mono text-gray-500">
+                  Accepting will attach this refined note to your import configuration.
+                </span>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowNoteAiModal(false)}
+                    className="px-4 py-2 bg-[#121921] hover:bg-[#1a2533] border border-[#1b2631] text-xs font-mono rounded-lg text-gray-400 hover:text-white"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNoteImportConfig(prev => ({
+                        ...prev,
+                        content: noteAiComparison.refined,
+                      }));
+                      setShowNoteAiModal(false);
+                    }}
+                    className="px-5 py-2 bg-cyan-500 hover:bg-cyan-400 text-black font-mono font-bold text-xs rounded-lg flex items-center gap-2"
+                  >
+                    <Check className="w-4 h-4" /> ACCEPT REFINED NOTE
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
         {/* MODAL: EDIT EXISTING WRITEUP                                              */}
         {/* ========================================================================= */}
         {editingWriteup && (
@@ -3317,6 +4167,65 @@ export default function AdminPage() {
                     onChange={(e) => setEditingNote({ ...editingNote, content: e.target.value })}
                     className="w-full bg-[#050708] border border-[#1b2631] rounded-lg p-3.5 text-xs font-mono text-white focus:border-cyan-400 focus:outline-none"
                   />
+                </div>
+
+                {/* Edit Vault Lock Toggle + Passphrase */}
+                <div className={`p-4 rounded-xl border space-y-3 transition-all ${editingNote.isLocked ? 'bg-amber-500/5 border-amber-500/40' : 'bg-[#050708] border-[#1b2631]'}`}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <Lock className={`w-4 h-4 ${editingNote.isLocked ? 'text-amber-400' : 'text-gray-500'}`} />
+                      <div>
+                        <span className="font-mono text-xs font-bold text-white block">LOCK AS VAULT NOTE?</span>
+                        <span className="text-[11px] font-mono text-gray-400">
+                          Vault notes require a passphrase to view full content.
+                        </span>
+                      </div>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={Boolean(editingNote.isLocked)}
+                      onChange={(e) => {
+                        const locked = e.target.checked;
+                        setEditingNote((prev: any) => ({
+                          ...prev,
+                          isLocked: locked,
+                          unlockPassword: locked && !prev.unlockPassword
+                            ? `VAULT{${(prev.title || 'Note').replace(/[^a-zA-Z0-9]/g, '')}_${Math.random().toString(16).substring(2, 8).toUpperCase()}!}`
+                            : locked ? prev.unlockPassword : '',
+                        }));
+                      }}
+                      className="w-5 h-5 accent-amber-500 rounded cursor-pointer"
+                    />
+                  </div>
+
+                  {editingNote.isLocked && (
+                    <div className="flex flex-col sm:flex-row gap-2.5">
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="text-xs font-mono text-amber-400 uppercase font-bold">
+                            Vault Passphrase:
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => setEditingNote((prev: any) => ({
+                              ...prev,
+                              unlockPassword: `VAULT{${(prev.title || 'Note').replace(/[^a-zA-Z0-9]/g, '')}_${Math.random().toString(16).substring(2, 8).toUpperCase()}!}`,
+                            }))}
+                            className="text-[11px] font-mono text-amber-400 hover:underline flex items-center gap-1"
+                          >
+                            <Sparkles className="w-3 h-3" /> Regenerate
+                          </button>
+                        </div>
+                        <input
+                          type="text"
+                          value={editingNote.unlockPassword || ''}
+                          onChange={(e) => setEditingNote({ ...editingNote, unlockPassword: e.target.value })}
+                          placeholder="Enter or auto-generate a vault passphrase"
+                          className="w-full bg-[#050708] border border-amber-500/40 rounded-lg px-3 py-2 text-sm font-mono text-amber-400 focus:border-amber-400 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="pt-3 border-t border-[#1b2631] flex items-center justify-end gap-3">

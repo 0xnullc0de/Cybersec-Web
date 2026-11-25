@@ -53,6 +53,53 @@ function getPlainText(richTextArray: any[]): string {
   return richTextArray.map((t) => t.plain_text || '').join('');
 }
 
+export function normalizeGifUrl(url: string): string {
+  const trimmed = url.trim();
+  const giphyPageMatch = trimmed.match(/^https?:\/\/(?:www\.)?giphy\.com\/(?:gifs|embed)\/(?:[a-zA-Z0-9_-]*-)?([a-zA-Z0-9]+)(?:[/?#].*)?$/i);
+  if (giphyPageMatch && giphyPageMatch[1]) {
+    return `https://media.giphy.com/media/${giphyPageMatch[1]}/giphy.gif`;
+  }
+  if (/^https?:\/\/imgur\.com\/([a-zA-Z0-9]+)\.gifv$/i.test(trimmed)) {
+    return trimmed.replace(/\.gifv$/i, '.gif').replace('://imgur.com/', '://i.imgur.com/');
+  }
+  return trimmed;
+}
+
+export function isGifOrMediaUrl(url: string): boolean {
+  const lower = url.toLowerCase();
+  return (
+    lower.includes('.gif') ||
+    lower.includes('giphy.com/gifs/') ||
+    lower.includes('giphy.com/embed/') ||
+    lower.includes('media.giphy.com') ||
+    lower.includes('i.giphy.com') ||
+    lower.includes('media.tenor.com') ||
+    lower.includes('c.tenor.com') ||
+    /\.(png|jpg|jpeg|webp)(\?|$)/i.test(lower)
+  );
+}
+
+export function richTextToMarkdown(richTextArray: any[]): string {
+  if (!Array.isArray(richTextArray)) return '';
+  return richTextArray
+    .map((t) => {
+      let text = t.plain_text || '';
+      if (!text) return '';
+      const ann = t.annotations || {};
+      if (ann.code) text = `\`${text}\``;
+      if (ann.bold) text = `**${text}**`;
+      if (ann.italic && !ann.bold) text = `*${text}*`;
+      if (t.href) {
+        if (t.href.trim() === (t.plain_text || '').trim()) {
+          return t.href;
+        }
+        text = `[${text}](${t.href})`;
+      }
+      return text;
+    })
+    .join('');
+}
+
 export interface WriteupMetadata {
   summary: string;
   initialAccessVector: string;
@@ -64,6 +111,19 @@ export interface WriteupMetadata {
 
 export interface RefinedWriteupResult {
   metadata: WriteupMetadata;
+  refinedMarkdown: string;
+}
+
+export interface NoteMetadata {
+  title: string;
+  category: string;
+  tags: string;
+  readTime: string;
+  summary: string;
+}
+
+export interface RefinedNoteResult {
+  metadata: NoteMetadata;
   refinedMarkdown: string;
 }
 
@@ -179,7 +239,7 @@ os: <Windows | Linux>
 export const WRITEUP_REFINER_PROMPT = buildRefinerPrompt('Target Machine');
 
 /**
- * Extracts raw markdown text and images from Notion blocks.
+ * Extracts raw markdown text, code blocks, callouts, images, and GIFs from Notion blocks.
  */
 export async function parseNotionBlocksToRaw(notion: Client, blockId: string): Promise<string> {
   const lines: string[] = [];
@@ -204,16 +264,61 @@ export async function parseNotionBlocksToRaw(notion: Client, blockId: string): P
           lines.push(`\n### ${getPlainText(block.heading_3.rich_text)}\n`);
           break;
         case 'paragraph': {
-          const t = getPlainText(block.paragraph.rich_text);
-          if (t) lines.push(t);
+          const t = richTextToMarkdown(block.paragraph.rich_text);
+          if (t) {
+            const trimmed = t.trim();
+            // Convert standalone bare GIF / Giphy URLs into inline Markdown images
+            if (/^https?:\/\/\S+$/i.test(trimmed) && isGifOrMediaUrl(trimmed)) {
+              lines.push(`\n![Animated GIF](${normalizeGifUrl(trimmed)})\n`);
+            } else {
+              lines.push(t);
+            }
+          }
           break;
         }
-        case 'bulleted_list_item':
-          lines.push(`- ${getPlainText(block.bulleted_list_item.rich_text)}`);
+        case 'bulleted_list_item': {
+          lines.push(`- ${richTextToMarkdown(block.bulleted_list_item.rich_text)}`);
+          if (block.has_children) {
+            const nested = await parseNotionBlocksToRaw(notion, block.id);
+            if (nested) lines.push(nested);
+          }
           break;
-        case 'numbered_list_item':
-          lines.push(`1. ${getPlainText(block.numbered_list_item.rich_text)}`);
+        }
+        case 'numbered_list_item': {
+          lines.push(`1. ${richTextToMarkdown(block.numbered_list_item.rich_text)}`);
+          if (block.has_children) {
+            const nested = await parseNotionBlocksToRaw(notion, block.id);
+            if (nested) lines.push(nested);
+          }
           break;
+        }
+        case 'to_do': {
+          const checked = Boolean(block.to_do?.checked);
+          lines.push(`- [${checked ? 'x' : ' '}] ${richTextToMarkdown(block.to_do?.rich_text)}`);
+          break;
+        }
+        case 'callout': {
+          const calloutText = richTextToMarkdown(block.callout?.rich_text);
+          const icon = block.callout?.icon?.emoji || '💡';
+          lines.push(`\n> ${icon} **Note:** ${calloutText}\n`);
+          if (block.has_children) {
+            const nested = await parseNotionBlocksToRaw(notion, block.id);
+            if (nested) lines.push(nested);
+          }
+          break;
+        }
+        case 'quote':
+          lines.push(`> ${richTextToMarkdown(block.quote.rich_text)}`);
+          break;
+        case 'toggle': {
+          const toggleTitle = richTextToMarkdown(block.toggle?.rich_text);
+          if (toggleTitle) lines.push(`\n**${toggleTitle}**\n`);
+          if (block.has_children) {
+            const nested = await parseNotionBlocksToRaw(notion, block.id);
+            if (nested) lines.push(nested);
+          }
+          break;
+        }
         case 'code': {
           const code = getPlainText(block.code.rich_text);
           const lang = block.code.language || 'bash';
@@ -221,13 +326,52 @@ export async function parseNotionBlocksToRaw(notion: Client, blockId: string): P
           break;
         }
         case 'image': {
-          const url = block.image.file?.url || block.image.external?.url;
-          const caption = getPlainText(block.image.caption) || 'Exploitation Screenshot';
-          if (url) lines.push(`\n![${caption}](${url})\n`);
+          const rawUrl = block.image.file?.url || block.image.external?.url;
+          if (rawUrl) {
+            const normalizedUrl = block.image.external?.url ? normalizeGifUrl(rawUrl) : rawUrl;
+            const rawCaption = getPlainText(block.image.caption);
+            const isGif = normalizedUrl.toLowerCase().includes('.gif') || normalizedUrl.includes('giphy.com') || normalizedUrl.includes('tenor.com');
+            const caption = rawCaption || (isGif ? 'Animated GIF' : 'Exploitation Screenshot');
+            lines.push(`\n![${caption}](${normalizedUrl})\n`);
+          }
+          break;
+        }
+        case 'embed':
+        case 'bookmark': {
+          const rawUrl = block[block.type]?.url;
+          if (rawUrl) {
+            if (isGifOrMediaUrl(rawUrl)) {
+              const normalizedUrl = normalizeGifUrl(rawUrl);
+              const caption = getPlainText(block[block.type]?.caption) || 'Animated GIF';
+              lines.push(`\n![${caption}](${normalizedUrl})\n`);
+            } else {
+              const caption = getPlainText(block[block.type]?.caption) || rawUrl;
+              lines.push(`[${caption}](${rawUrl})`);
+            }
+          }
+          break;
+        }
+        case 'video': {
+          const vidUrl = block.video?.external?.url || block.video?.file?.url;
+          if (vidUrl && isGifOrMediaUrl(vidUrl)) {
+            lines.push(`\n![Animated GIF](${normalizeGifUrl(vidUrl)})\n`);
+          } else if (vidUrl) {
+            lines.push(`[Video Reference](${vidUrl})`);
+          }
+          break;
+        }
+        case 'table_row': {
+          const cells = (block.table_row?.cells || []).map((cell: any[]) => richTextToMarkdown(cell));
+          if (cells.length > 0) {
+            lines.push(`| ${cells.join(' | ')} |`);
+          }
           break;
         }
         case 'divider':
           lines.push('\n---\n');
+          break;
+        case 'child_page':
+        case 'child_database':
           break;
         default:
           if (block.has_children) {
@@ -277,66 +421,157 @@ export function parseFrontmatterAndContent(text: string): RefinedWriteupResult {
   return { metadata, refinedMarkdown: content };
 }
 
+export function buildNoteRefinerPrompt(noteTitle: string, customInstructions?: string): string {
+  const customSection = customInstructions && customInstructions.trim()
+    ? `\n### ⚡ CRITICAL AUTHOR DIRECTIVES & CUSTOM FOCUS POINTS (HIGHEST PRIORITY):
+The author provided the following specific points to explain, tweak, or emphasize in this note:
+"""
+${customInstructions.trim()}
+"""
+You MUST fulfill every single one of these custom directives with deep technical precision and engaging clarity.\n`
+    : '';
+
+  return `You are a charismatic senior offensive security researcher, red teamer, and engaging technical storyteller writing hacker field notes ("Today I Learned" / Offensive Tradecraft Notes).
+Your job is to turn raw lab notes, cheatsheets, and GIF/image snippets into notes that are genuinely **enjoyable, fun, and memorable to read**, while **delivering the full technical internals without fail**.
+
+### TARGET NOTE TOPIC:
+- Topic Title: "${noteTitle}"
+${customSection}
+### 1. METADATA FRONTMATTER (MANDATORY):
+At the VERY START of your response, output a YAML frontmatter block:
+---
+title: <Polished yet catchy title for this note, keeping "${noteTitle}" recognizable>
+category: <Best single category: Active Directory | Privilege Escalation | Web | Pivoting | Tooling | Credentials | Evasion | Misc>
+tags: <comma-separated relevant technical tags, e.g. Active Directory, Kerberos, DPAPI, Mimikatz>
+readTime: <estimated read time, e.g. 4 min read>
+summary: <1-2 engaging sentences capturing what this technique does and why it matters in offensive operations>
+---
+
+### 2. VOICE, ENJOYABILITY & TECHNICAL RIGOR:
+- **Enjoyable, Not Dry**: Write like a sharp red-team mentor swapping war stories over coffee—use lively pacing, relatable commentary on why a quirk exists or why an exploit is satisfying, and punchy callout tips (\`> 💡 **Pro Tip:** ...\`).
+- **Zero Technical Compromises (Full Depth Without Fail)**:
+  * NEVER dumb down or omit technical mechanics!
+  * Explain the underlying internals: memory structures, Windows/Linux permissions, protocol handshakes, cryptography/DPAPI masterkey derivation, registry keys, flags, why a specific parameter is required, and what happens under the hood.
+  * Explain edge cases, operational gotchas (e.g., OPSEC noise, common errors), and quick detection/remediation notes where helpful.
+- **No Redundant Top H1**: The site card already displays the note title in the header. Start the body directly with an engaging hook paragraph (or intro section) and clean \`##\` / \`###\` technical subsections.
+
+### 3. GIFS, MEMES & SCREENSHOTS:
+- Retain 100% of every image and GIF token (\`%%NOTION_IMAGE_X%%\`) from the raw notes—never drop any!
+- If the author added GIFs to keep reading enjoyable, place them naturally at the comedic or visual beat with a witty/relatable markdown caption (e.g., \`![Me watching Mimikatz dump cleartext creds in 2026](%%NOTION_IMAGE_0%%)\`) plus smooth text leading into and out of it.
+- Never stack multiple images/GIFs back-to-back without engaging commentary in between.
+
+### 4. UNIFIED COMMAND & VERBATIM OUTPUT (NEVER SPLIT, NEVER TRUNCATE):
+- Keep the command and its full terminal output inside ONE unified code block:
+  \`\`\`bash:command
+  $ <command>
+  <verbatim output>
+  \`\`\`
+- NEVER write "*Output:*" between split code blocks.
+- **NEVER truncate or summarize terminal outputs with "..."**! Keep full command flags and outputs verbatim.
+- Follow each code block or script with a sharp explanation of what every important flag/line does.
+
+### 5. OUTPUT FORMAT:
+- Output ONLY the YAML frontmatter block followed immediately by clean, publication-ready Markdown. No chat preamble.`;
+}
+
+export function parseNoteFrontmatterAndContent(text: string, fallbackTitle: string): RefinedNoteResult {
+  const match = text.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/);
+  let rawMeta = '';
+  let content = text;
+
+  if (match) {
+    rawMeta = match[1];
+    content = match[2].trim();
+  }
+
+  const getField = (key: string): string => {
+    const m = rawMeta.match(new RegExp(`^${key}:\\s*(.*)$`, 'm'));
+    return m ? m[1].trim().replace(/^['"]|['"]$/g, '') : '';
+  };
+
+  // Strip redundant duplicate leading H1 if it matches title closely
+  content = content.replace(/^#\s+[^\r\n]+\r?\n+/, '').trim();
+
+  return {
+    metadata: {
+      title: getField('title') || fallbackTitle,
+      category: getField('category') || 'Tooling',
+      tags: getField('tags') || 'Security, Tradecraft',
+      readTime: getField('readTime') || '4 min read',
+      summary: getField('summary') || `${fallbackTitle} offensive field note and technical reference.`,
+    },
+    refinedMarkdown: content,
+  };
+}
+
 export interface RefineOptions {
   customApiKey?: string;
   pageTitle?: string;
   customInstructions?: string;
 }
 
-/**
- * Refines raw markdown notes using Gemini Flash.
- * Preserves 100% of images, all methodology steps, and extracts writeup metadata.
- */
-export async function refineWriteupContent(
-  rawMarkdown: string,
-  optionsOrApiKey?: string | RefineOptions
-): Promise<RefinedWriteupResult> {
-  let customApiKey: string | undefined;
-  let pageTitle: string | undefined;
-  let customInstructions: string | undefined;
+interface ImageToken {
+  placeholder: string;
+  originalAlt: string;
+  originalUrl: string;
+}
 
-  if (typeof optionsOrApiKey === 'string') {
-    customApiKey = optionsOrApiKey;
-  } else if (optionsOrApiKey && typeof optionsOrApiKey === 'object') {
-    customApiKey = optionsOrApiKey.customApiKey;
-    pageTitle = optionsOrApiKey.pageTitle;
-    customInstructions = optionsOrApiKey.customInstructions;
-  }
-
-  const apiKey = customApiKey || getGeminiApiKey();
-  if (!apiKey) {
-    throw new Error(
-      'GEMINI_API_KEY is not set. Please add GEMINI_API_KEY=your_key to .env.local'
-    );
-  }
-
-  // Resolve target machine name
-  let machineTitle = pageTitle?.trim();
-  if (!machineTitle) {
-    const titleMatch = rawMarkdown.match(/^#\s+(.+)$/m);
-    if (titleMatch) {
-      machineTitle = titleMatch[1].trim();
-    } else {
-      machineTitle = 'Machine Walkthrough';
-    }
-  }
-
-  // 1. Tokenize images to clean tokens: ![caption](%%NOTION_IMAGE_0%%)
-  const imageTokens: { placeholder: string; originalAlt: string; originalUrl: string }[] = [];
+function tokenizeMarkdownMedia(rawMarkdown: string): {
+  tokenizedMarkdown: string;
+  imageTokens: ImageToken[];
+} {
+  const imageTokens: ImageToken[] = [];
   const imgRegex = /!\[(.*?)\]\((https?:\/\/[^\s)]+)\)/g;
   let imgIndex = 0;
 
-  const tokenizedMarkdown = rawMarkdown.replace(imgRegex, (fullMatch, alt, url) => {
+  const tokenizedMarkdown = rawMarkdown.replace(imgRegex, (_fullMatch, alt, url) => {
     const placeholder = `%%NOTION_IMAGE_${imgIndex}%%`;
     imageTokens.push({
       placeholder,
-      originalAlt: alt?.trim() || 'Exploitation Screenshot',
+      originalAlt: alt?.trim() || 'Visual Evidence',
       originalUrl: url.trim(),
     });
     imgIndex++;
-    return `![${alt?.trim() || 'Exploitation Screenshot'}](${placeholder})`;
+    return `![${alt?.trim() || 'Visual Evidence'}](${placeholder})`;
   });
 
+  return { tokenizedMarkdown, imageTokens };
+}
+
+function restoreMediaAndPostProcess(markdown: string, imageTokens: ImageToken[]): string {
+  let restoredText = markdown;
+  const missedImages: ImageToken[] = [];
+
+  for (const img of imageTokens) {
+    if (restoredText.includes(img.placeholder)) {
+      restoredText = restoredText.replaceAll(img.placeholder, img.originalUrl);
+    } else {
+      missedImages.push(img);
+    }
+  }
+
+  if (missedImages.length > 0) {
+    restoredText += '\n\n## Additional Visuals & GIFs\n';
+    for (const img of missedImages) {
+      restoredText += `\n![${img.originalAlt}](${img.originalUrl})\n`;
+    }
+  }
+
+  restoredText = mergeSplitCommandAndOutput(restoredText);
+
+  const fences = (restoredText.match(/```/g) || []).length;
+  if (fences % 2 !== 0) {
+    restoredText += '\n```';
+  }
+
+  return restoredText;
+}
+
+async function callGeminiWithFallback(
+  apiKey: string,
+  systemPart: string,
+  userPart: string
+): Promise<string> {
   const candidateModels = [
     'gemini-flash-lite-latest',
     'gemini-3.5-flash-lite',
@@ -346,32 +581,15 @@ export async function refineWriteupContent(
     'gemini-3.1-flash-lite',
   ];
 
-  const imageDirectives = imageTokens.length > 0
-    ? `\n\n### MANDATORY IMAGE TOKENS & PLACEMENT:
-There are exactly ${imageTokens.length} screenshot images in these notes. You MUST include ALL ${imageTokens.length} image tokens (from %%NOTION_IMAGE_0%% to %%NOTION_IMAGE_${imageTokens.length - 1}%%) in your refined walkthrough:
-- %%NOTION_IMAGE_0%%: Machine Avatar / Badge (MUST be placed at the very top of the writeup, right under the title "# ${machineTitle}"!)
-- %%NOTION_IMAGE_1%% through %%NOTION_IMAGE_${imageTokens.length - 1}%%: Evidence screenshots and command output captures.
-CRITICAL SCREENSHOT PRESENTATION:
-- Retain all of them directly in their corresponding sections based on the context in the raw notes.
-- NEVER place two images directly adjacent to each other without explanation between them!
-- Every single screenshot MUST be preceded by an explanation of what action or operational step was taken.
-- Every single screenshot MUST be followed immediately by a technical breakdown of what is shown on screen, why it happened, and what it indicates for exploitation.`
-    : '';
-
-  const systemPrompt = buildRefinerPrompt(machineTitle, customInstructions);
-
   const payload = {
     contents: [
       {
         role: 'user',
-        parts: [
-          { text: systemPrompt + imageDirectives },
-          { text: `Raw writeup notes for target machine "${machineTitle}" to refine into a comprehensive walkthrough:\n\n${tokenizedMarkdown}` },
-        ],
+        parts: [{ text: systemPart }, { text: userPart }],
       },
     ],
     generationConfig: {
-      temperature: 0.25,
+      temperature: 0.35,
       maxOutputTokens: 32768,
     },
   };
@@ -388,7 +606,6 @@ CRITICAL SCREENSHOT PRESENTATION:
         signal: AbortSignal.timeout(35000),
       });
 
-      // If temporary high-demand spike (503/429), retry once after a 2-second backoff
       if (response.status === 503 || response.status === 429) {
         await new Promise((r) => setTimeout(r, 2000));
         response = await fetch(url, {
@@ -401,52 +618,8 @@ CRITICAL SCREENSHOT PRESENTATION:
 
       if (response.ok) {
         const data = await response.json();
-        const refinedText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (refinedText) {
-          // 2. Parse frontmatter metadata and strip Introduction section
-          const parsed = parseFrontmatterAndContent(refinedText);
-          let restoredText = parsed.refinedMarkdown;
-
-          // Enforce correct H1 machine title
-          if (!restoredText.startsWith('# ')) {
-            restoredText = `# ${machineTitle}\n\n` + restoredText;
-          } else {
-            restoredText = restoredText.replace(/^#\s+[^\r\n]+/m, `# ${machineTitle}`);
-          }
-
-          const missedImages: typeof imageTokens = [];
-
-          // 3. Restore image URLs
-          for (const img of imageTokens) {
-            if (restoredText.includes(img.placeholder)) {
-              restoredText = restoredText.replaceAll(img.placeholder, img.originalUrl);
-            } else {
-              missedImages.push(img);
-            }
-          }
-
-          // Fallback safety net: if any token was omitted, append it
-          if (missedImages.length > 0) {
-            restoredText += '\n\n## Additional Visual Evidence\n';
-            for (const img of missedImages) {
-              restoredText += `\n![${img.originalAlt}](${img.originalUrl})\n*Screenshot: ${img.originalAlt}*\n`;
-            }
-          }
-
-          // 4. Automatically merge any split command and output code blocks
-          restoredText = mergeSplitCommandAndOutput(restoredText);
-
-          // 5. Ensure balanced code blocks
-          const fences = (restoredText.match(/```/g) || []).length;
-          if (fences % 2 !== 0) {
-            restoredText += '\n```';
-          }
-
-          return {
-            metadata: parsed.metadata,
-            refinedMarkdown: restoredText,
-          };
-        }
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (text) return text;
       } else {
         const errText = await response.text();
         modelErrors.push(`[${model}] HTTP ${response.status}: ${errText.slice(0, 200)}`);
@@ -457,6 +630,125 @@ CRITICAL SCREENSHOT PRESENTATION:
   }
 
   throw new Error(`Gemini refinement failed across available models: ${modelErrors.join(' | ')}`);
+}
+
+function parseRefineArgs(optionsOrApiKey?: string | RefineOptions): RefineOptions {
+  if (typeof optionsOrApiKey === 'string') {
+    return { customApiKey: optionsOrApiKey };
+  }
+  return optionsOrApiKey || {};
+}
+
+/**
+ * Refines raw writeup notes using Gemini Flash into a strict 0xdf-style walkthrough.
+ * Preserves 100% of images, all methodology steps, and extracts writeup metadata.
+ */
+export async function refineWriteupContent(
+  rawMarkdown: string,
+  optionsOrApiKey?: string | RefineOptions
+): Promise<RefinedWriteupResult> {
+  const { customApiKey, pageTitle, customInstructions } = parseRefineArgs(optionsOrApiKey);
+
+  const apiKey = customApiKey || getGeminiApiKey();
+  if (!apiKey) {
+    throw new Error(
+      'GEMINI_API_KEY is not set. Please add GEMINI_API_KEY=your_key to .env.local'
+    );
+  }
+
+  let machineTitle = pageTitle?.trim();
+  if (!machineTitle) {
+    const titleMatch = rawMarkdown.match(/^#\s+(.+)$/m);
+    machineTitle = titleMatch ? titleMatch[1].trim() : 'Machine Walkthrough';
+  }
+
+  const { tokenizedMarkdown, imageTokens } = tokenizeMarkdownMedia(rawMarkdown);
+
+  const imageDirectives = imageTokens.length > 0
+    ? `\n\n### MANDATORY IMAGE TOKENS & PLACEMENT:
+There are exactly ${imageTokens.length} screenshot images in these notes. You MUST include ALL ${imageTokens.length} image tokens (from %%NOTION_IMAGE_0%% to %%NOTION_IMAGE_${imageTokens.length - 1}%%) in your refined walkthrough:
+- %%NOTION_IMAGE_0%%: Machine Avatar / Badge (MUST be placed at the very top of the writeup, right under the title "# ${machineTitle}"!)
+- %%NOTION_IMAGE_1%% through %%NOTION_IMAGE_${imageTokens.length - 1}%%: Evidence screenshots and command output captures.
+CRITICAL SCREENSHOT PRESENTATION:
+- Retain all of them directly in their corresponding sections based on the context in the raw notes.
+- NEVER place two images directly adjacent to each other without explanation between them!
+- Every single screenshot MUST be preceded by an explanation of what action or operational step was taken.
+- Every single screenshot MUST be followed immediately by a technical breakdown of what is shown on screen, why it happened, and what it indicates for exploitation.`
+    : '';
+
+  const systemPrompt = buildRefinerPrompt(machineTitle, customInstructions);
+  const refinedText = await callGeminiWithFallback(
+    apiKey,
+    systemPrompt + imageDirectives,
+    `Raw writeup notes for target machine "${machineTitle}" to refine into a comprehensive walkthrough:\n\n${tokenizedMarkdown}`
+  );
+
+  const parsed = parseFrontmatterAndContent(refinedText);
+  let restoredText = parsed.refinedMarkdown;
+
+  if (!restoredText.startsWith('# ')) {
+    restoredText = `# ${machineTitle}\n\n` + restoredText;
+  } else {
+    restoredText = restoredText.replace(/^#\s+[^\r\n]+/m, `# ${machineTitle}`);
+  }
+
+  restoredText = restoreMediaAndPostProcess(restoredText, imageTokens);
+
+  return {
+    metadata: parsed.metadata,
+    refinedMarkdown: restoredText,
+  };
+}
+
+/**
+ * Refines raw TIL / Technique notes using Gemini Flash into enjoyable yet deeply technical field notes.
+ * Preserves 100% of GIFs/images and extracts TIL metadata.
+ */
+export async function refineNoteContent(
+  rawMarkdown: string,
+  optionsOrApiKey?: string | RefineOptions
+): Promise<RefinedNoteResult> {
+  const { customApiKey, pageTitle, customInstructions } = parseRefineArgs(optionsOrApiKey);
+
+  const apiKey = customApiKey || getGeminiApiKey();
+  if (!apiKey) {
+    throw new Error(
+      'GEMINI_API_KEY is not set. Please add GEMINI_API_KEY=your_key to .env.local'
+    );
+  }
+
+  let noteTitle = pageTitle?.trim();
+  if (!noteTitle) {
+    const titleMatch = rawMarkdown.match(/^#\s+(.+)$/m);
+    noteTitle = titleMatch ? titleMatch[1].trim() : 'Offensive Technique Note';
+  }
+
+  const { tokenizedMarkdown, imageTokens } = tokenizeMarkdownMedia(rawMarkdown);
+
+  const mediaDirectives = imageTokens.length > 0
+    ? `\n\n### MANDATORY GIF & IMAGE TOKENS (${imageTokens.length} TOTAL):
+There are ${imageTokens.length} media items (GIFs, memes, diagrams, screenshots) in the author's notes:
+${imageTokens.map((t) => `- ${t.placeholder}: "${t.originalAlt}" (${isGifOrMediaUrl(t.originalUrl) && t.originalUrl.toLowerCase().includes('.gif') ? 'Animated GIF' : 'Image/GIF'})`).join('\n')}
+CRITICAL RULES FOR MEDIA & GIFS:
+- Retain EVERY SINGLE token (%%NOTION_IMAGE_0%% through %%NOTION_IMAGE_${imageTokens.length - 1}%%).
+- Place GIFs right where they elevate the story or deliver a fun visual reaction, giving each GIF a witty, fitting caption in ![Caption](%%NOTION_IMAGE_X%%).
+- Never stack images/GIFs back-to-back without smooth commentary between them.`
+    : '';
+
+  const systemPrompt = buildNoteRefinerPrompt(noteTitle, customInstructions);
+  const refinedText = await callGeminiWithFallback(
+    apiKey,
+    systemPrompt + mediaDirectives,
+    `Raw research / TIL notes titled "${noteTitle}" to refine into an enjoyable, deeply technical field note:\n\n${tokenizedMarkdown}`
+  );
+
+  const parsed = parseNoteFrontmatterAndContent(refinedText, noteTitle);
+  const restoredText = restoreMediaAndPostProcess(parsed.refinedMarkdown, imageTokens);
+
+  return {
+    metadata: parsed.metadata,
+    refinedMarkdown: restoredText,
+  };
 }
 
 /**

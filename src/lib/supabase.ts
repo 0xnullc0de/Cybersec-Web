@@ -73,8 +73,9 @@ export function mapDbToCert(row: any): Certification {
   };
 }
 
-// Map database row to TilNote type
+// Map database row to TilNote type (safe for public consumers)
 export function mapDbToTilNote(row: any): TilNote {
+  const isLocked = Boolean(row.is_locked);
   return {
     id: row.id,
     slug: row.slug,
@@ -84,8 +85,10 @@ export function mapDbToTilNote(row: any): TilNote {
     tags: row.tags || [],
     readTime: row.read_time || '3 min read',
     summary: row.summary || '',
-    content: row.content || '',
+    content: isLocked ? '' : (row.content || ''),
+    isLocked,
     imageUrls: row.image_urls || [],
+    notionPageId: row.notion_page_id || undefined,
   };
 }
 
@@ -171,14 +174,26 @@ export async function getCertificates(): Promise<Certification[]> {
 }
 
 /**
- * Fetch all TIL / Technique notes from Supabase.
+ * Fetch all TIL / Technique notes safely from Supabase (without exposing locked content or secrets).
  */
 export async function getTilNotes(): Promise<TilNote[]> {
   try {
-    const { data, error } = await supabase
-      .from('til_notes')
+    const publicRes = await supabase
+      .from('til_notes_public')
       .select('*')
-      .order('display_order', { ascending: true });
+      .order('date', { ascending: false })
+      .order('display_order', { ascending: false });
+
+    if (!publicRes.error && publicRes.data && publicRes.data.length > 0) {
+      return publicRes.data.map(mapDbToTilNote);
+    }
+
+    const client = supabaseAdmin || supabase;
+    const { data, error } = await client
+      .from('til_notes')
+      .select('id, slug, title, category, date, tags, read_time, summary, content, image_urls, display_order, created_at, updated_at')
+      .order('date', { ascending: false })
+      .order('display_order', { ascending: false });
 
     if (error || !data || data.length === 0) {
       return fallbackTilNotes;
