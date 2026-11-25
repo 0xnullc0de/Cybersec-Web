@@ -14,14 +14,17 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { pageId, geminiApiKey, pageTitle, customInstructions, notionNotesApiKey } = body;
+    const { pageId, geminiApiKey, pageTitle, customInstructions, notionNotesApiKey, notionToken } = body;
 
     if (!pageId) {
       return NextResponse.json({ error: 'pageId is required' }, { status: 400 });
     }
 
     const customNotionToken =
-      request.headers.get('x-notion-notes-key') || notionNotesApiKey || null;
+      request.headers.get('x-notion-notes-key') ||
+      notionNotesApiKey ||
+      notionToken ||
+      null;
 
     // 1. Fetch raw Notion blocks (images, GIFs, embeds, code blocks preserved)
     const { rawMarkdown, resolvedTitle } = await fetchRawNotionNoteMarkdown(

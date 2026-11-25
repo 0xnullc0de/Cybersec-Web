@@ -474,13 +474,18 @@ export default function AdminPage() {
     setIsNoteRefining(true);
     setMessage(null);
     try {
-      const token = notionNotesCustomKey || localStorage.getItem('notion_notes_api_key') || undefined;
+      const token = notionNotesCustomKey || (typeof window !== 'undefined' ? localStorage.getItem('notion_notes_api_key') : '') || undefined;
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'x-admin-key': adminKey,
+      };
+      if (token) {
+        headers['x-notion-notes-key'] = token;
+      }
+
       const res = await fetch('/api/admin/notion-notes/refine', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-admin-key': adminKey,
-        },
+        headers,
         body: JSON.stringify({
           pageId,
           pageTitle: selectedNotionNotePage?.title || noteImportConfig.title,
@@ -488,6 +493,7 @@ export default function AdminPage() {
           isLocked: noteImportConfig.isLocked,
           geminiApiKey: adminGeminiKey || undefined,
           notionToken: token,
+          notionNotesApiKey: token,
         }),
       });
 
@@ -497,9 +503,17 @@ export default function AdminPage() {
           raw: data.rawMarkdown,
           refined: data.refinedMarkdown,
         });
+
+        const refinedTitle = data.metadata?.title || noteImportConfig.title;
+        const refinedSlug = refinedTitle
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/(^-|-$)/g, '');
+
         setNoteImportConfig((prev) => ({
           ...prev,
-          title: data.metadata?.title || prev.title,
+          title: refinedTitle,
+          slug: refinedSlug || prev.slug,
           category: data.metadata?.category || prev.category,
           tags: data.metadata?.tags || prev.tags,
           readTime: data.metadata?.readTime || prev.readTime,
@@ -522,13 +536,18 @@ export default function AdminPage() {
     setLoading(true);
     setMessage(null);
     try {
-      const token = notionNotesCustomKey || localStorage.getItem('notion_notes_api_key') || undefined;
+      const token = notionNotesCustomKey || (typeof window !== 'undefined' ? localStorage.getItem('notion_notes_api_key') : '') || undefined;
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'x-admin-key': adminKey,
+      };
+      if (token) {
+        headers['x-notion-notes-key'] = token;
+      }
+
       const res = await fetch('/api/admin/notion-notes/import', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-admin-key': adminKey,
-        },
+        headers,
         body: JSON.stringify({
           pageId: selectedNotionNotePage.id,
           overrides: {
@@ -543,6 +562,7 @@ export default function AdminPage() {
             unlockPassword: noteImportConfig.isLocked ? noteImportConfig.unlockPassword : '',
           },
           notionToken: token,
+          notionNotesApiKey: token,
         }),
       });
 
@@ -3434,8 +3454,72 @@ export default function AdminPage() {
                   </div>
                 )}
 
+                {/* AI Note Refiner Section (Placed at top for easy 1-click Auto-Fill) */}
+                <div className="p-4 rounded-xl bg-[#09110d] border border-cyan-500/40 flex flex-col gap-3 shadow-[0_0_15px_rgba(6,182,212,0.1)]">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-cyan-400" />
+                        <span className="font-mono text-xs font-bold text-white">AI NOTE REFINER &amp; AUTO-FILL</span>
+                        {noteImportConfig.content ? (
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded font-bold bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 flex items-center gap-1">
+                            <Check className="w-3 h-3" /> ALL SPACES AUTO-FILLED
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded font-bold bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">
+                            GEMINI FLASH
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] font-mono text-gray-400 mt-1">
+                        Click below to have AI analyze your Notion note, keep all GIFs, and automatically fill out the Title, Category, Tags, Read Time, and Summary.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={isNoteRefining}
+                      onClick={() => handleTriggerNoteAiRefine(selectedNotionNotePage.id)}
+                      className="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-black text-xs font-mono font-bold rounded-lg transition-all flex items-center justify-center gap-2 shrink-0 cursor-pointer shadow-[0_0_15px_rgba(6,182,212,0.25)]"
+                    >
+                      {isNoteRefining ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ANALYZING &amp; AUTO-FILLING...
+                        </>
+                      ) : noteImportConfig.content ? (
+                        <>
+                          <Eye className="w-3.5 h-3.5" />
+                          VIEW REFINED NOTE
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-3.5 h-3.5" />
+                          ⚡ AUTO-FILL &amp; REFINE WITH AI
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  <div className="pt-2 border-t border-[#1b2631]">
+                    <label className="block text-[11px] font-mono text-gray-400 mb-1">
+                      Directives for AI (Optional):
+                    </label>
+                    <input
+                      type="text"
+                      value={noteCustomDirectives}
+                      onChange={(e) => setNoteCustomDirectives(e.target.value)}
+                      placeholder="e.g. Focus on SSRF bypasses, mention AWS IMDSv2 vs IMDSv1..."
+                      className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-1.5 text-xs font-mono text-white placeholder-gray-600 focus:border-cyan-400 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
                 <div>
-                  <label className="block text-xs font-mono text-gray-400 uppercase mb-1">Technique Title</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-mono text-gray-400 uppercase">Technique Title</label>
+                    <span className="text-[10px] font-mono text-cyan-400">✨ AI Auto-fills this</span>
+                  </div>
                   <input
                     type="text"
                     value={noteImportConfig.title}
@@ -3487,74 +3571,16 @@ export default function AdminPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-mono text-gray-400 uppercase mb-1">Summary / Teaser</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-mono text-gray-400 uppercase">Summary / Teaser</label>
+                    <span className="text-[10px] font-mono text-cyan-400">✨ AI Auto-fills this</span>
+                  </div>
                   <textarea
                     rows={2}
                     value={noteImportConfig.summary}
                     onChange={(e) => setNoteImportConfig({ ...noteImportConfig, summary: e.target.value })}
                     className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-2 text-xs font-mono text-white focus:border-cyan-400 focus:outline-none"
                   />
-                </div>
-
-                {/* AI Note Refiner Section */}
-                <div className="p-4 rounded-xl bg-[#09110d] border border-cyan-500/40 flex flex-col gap-3 shadow-[0_0_15px_rgba(6,182,212,0.1)]">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <Sparkles className="w-4 h-4 text-cyan-400" />
-                        <span className="font-mono text-xs font-bold text-white">AI NOTE REFINER (GIFS &amp; MENTOR INTEL)</span>
-                        {noteImportConfig.content ? (
-                          <span className="text-[10px] font-mono px-2 py-0.5 rounded font-bold bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 flex items-center gap-1">
-                            <Check className="w-3 h-3" /> REFINED CONTENT READY
-                          </span>
-                        ) : (
-                          <span className="text-[10px] font-mono px-2 py-0.5 rounded font-bold bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">
-                            GEMINI FLASH
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[11px] font-mono text-gray-400 mt-1">
-                        Keeps all animated GIFs &amp; images intact, adopts an engaging offensive mentor voice, and delivers deep technical internals without truncation.
-                      </p>
-                    </div>
-
-                    <button
-                      type="button"
-                      disabled={isNoteRefining}
-                      onClick={() => handleTriggerNoteAiRefine(selectedNotionNotePage.id)}
-                      className="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-black text-xs font-mono font-bold rounded-lg transition-all flex items-center justify-center gap-2 shrink-0 cursor-pointer shadow-[0_0_15px_rgba(6,182,212,0.25)]"
-                    >
-                      {isNoteRefining ? (
-                        <>
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          REFINING NOTE...
-                        </>
-                      ) : noteImportConfig.content ? (
-                        <>
-                          <Eye className="w-3.5 h-3.5" />
-                          VIEW REFINED NOTE
-                        </>
-                      ) : (
-                        <>
-                          <Sparkles className="w-3.5 h-3.5" />
-                          ⚡ REFINE &amp; PRESERVE GIFS
-                        </>
-                      )}
-                    </button>
-                  </div>
-
-                  <div className="pt-2 border-t border-[#1b2631]">
-                    <label className="block text-[11px] font-mono text-gray-400 mb-1">
-                      Directives for AI (Optional):
-                    </label>
-                    <input
-                      type="text"
-                      value={noteCustomDirectives}
-                      onChange={(e) => setNoteCustomDirectives(e.target.value)}
-                      placeholder="e.g. Explain the DPAPI master key decryption step in extra detail, emphasize LOLBAS execution..."
-                      className="w-full bg-[#050708] border border-[#1b2631] rounded-lg px-3 py-1.5 text-xs font-mono text-white placeholder-gray-600 focus:border-cyan-400 focus:outline-none"
-                    />
-                  </div>
                 </div>
 
                 {/* Content Editor */}
@@ -3566,7 +3592,7 @@ export default function AdminPage() {
                     rows={8}
                     value={noteImportConfig.content}
                     onChange={(e) => setNoteImportConfig({ ...noteImportConfig, content: e.target.value })}
-                    placeholder="Leave blank to import raw blocks from Notion, or click Refine with AI..."
+                    placeholder="Click 'AUTO-FILL & REFINE WITH AI' above to generate the full breakdown with GIFs preserved..."
                     className="w-full bg-[#050708] border border-[#1b2631] rounded-lg p-3 text-xs font-mono text-white focus:border-cyan-400 focus:outline-none"
                   />
                 </div>
