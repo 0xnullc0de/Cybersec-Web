@@ -68,30 +68,83 @@ function TilContent({ initialView }: { initialView?: 'all' | 'public' | 'locked'
   }, [notes]);
 
   const filteredNotes = useMemo(() => {
-    return notes.filter((note) => {
-      // 1. Vault Tab Filter
+    const q = searchQuery.trim().toLowerCase();
+
+    // 1. Vault Tab and Category Filter
+    const baseFiltered = notes.filter((note) => {
       if (activeTab === 'public' && note.isLocked) return false;
       if (activeTab === 'locked' && !note.isLocked) return false;
-
-      // 2. Search Query
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const matchesTitle = note.title.toLowerCase().includes(q);
-        const matchesContent = (note.content || '').toLowerCase().includes(q);
-        const matchesTags = note.tags.some((t) => t.toLowerCase().includes(q));
-        const matchesSummary = (note.summary || '').toLowerCase().includes(q);
-        if (!matchesTitle && !matchesContent && !matchesTags && !matchesSummary) {
-          return false;
-        }
-      }
-
-      // 3. Category Filter
-      if (selectedCategory !== 'All' && note.category !== selectedCategory) {
-        return false;
-      }
-
+      if (selectedCategory !== 'All' && note.category !== selectedCategory) return false;
       return true;
     });
+
+    if (!q) {
+      return baseFiltered;
+    }
+
+    // 2. Score and rank by relevance
+    const scoredList: { note: typeof notes[0]; score: number }[] = [];
+
+    for (const note of baseFiltered) {
+      let score = 0;
+      const titleLower = (note.title || '').toLowerCase();
+      const slugLower = (note.slug || '').toLowerCase();
+      const summaryLower = (note.summary || '').toLowerCase();
+      const contentLower = (note.content || '').toLowerCase();
+      const tagsList = (note.tags || []).map((t) => t.toLowerCase().replace(/^#/, '').trim());
+
+      // Title matches (highest priority)
+      if (titleLower === q) {
+        score += 2000;
+      } else if (titleLower.startsWith(q)) {
+        score += 1000;
+      } else if (titleLower.includes(q)) {
+        score += 500;
+      }
+
+      // Slug matches
+      if (slugLower === q) {
+        score += 1500;
+      } else if (slugLower.startsWith(q)) {
+        score += 800;
+      } else if (slugLower.includes(q)) {
+        score += 300;
+      }
+
+      // Tag matches
+      if (tagsList.includes(q)) {
+        score += 250;
+      } else if (tagsList.some((t) => t.includes(q))) {
+        score += 100;
+      }
+
+      // Summary matches
+      if (summaryLower.includes(q)) {
+        score += 30;
+      }
+
+      // Content matches
+      if (contentLower.includes(q)) {
+        score += 15;
+      }
+
+      if (score > 0) {
+        scoredList.push({ note, score });
+      }
+    }
+
+    // Sort by score descending; if score tied, newest date first
+    scoredList.sort((a, b) => {
+      if (b.score !== a.score) {
+        return b.score - a.score;
+      }
+      return (
+        new Date(b.note.date || 0).getTime() -
+        new Date(a.note.date || 0).getTime()
+      );
+    });
+
+    return scoredList.map((item) => item.note);
   }, [notes, activeTab, searchQuery, selectedCategory]);
 
   const handleTabChange = (tab: 'all' | 'public' | 'locked') => {

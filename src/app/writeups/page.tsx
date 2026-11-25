@@ -47,26 +47,13 @@ export default function WriteupsPage() {
   }, [allWriteups]);
 
   // Filtered writeups calculation
+  // Filtered writeups calculation with relevance-ranked search
   const filteredWriteups = useMemo(() => {
-    return allWriteups.filter((w) => {
+    const q = searchQuery.trim().toLowerCase();
 
-      // 1. Search query
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const matchesTitle = w.title.toLowerCase().includes(q);
-        const matchesSummary = (w.summary || '').toLowerCase().includes(q);
-        const matchesVectors =
-          (w.initialAccessVector || '').toLowerCase().includes(q) ||
-          (w.privEscVector || '').toLowerCase().includes(q);
-        const matchesTags = (w.tags || []).some((t) => t.toLowerCase().includes(q));
-        const matchesOs = (w.os || '').toLowerCase().includes(q);
-        const matchesDifficulty = (w.difficulty || '').toLowerCase().includes(q);
-        if (!matchesTitle && !matchesSummary && !matchesVectors && !matchesTags && !matchesOs && !matchesDifficulty) {
-          return false;
-        }
-      }
-
-      // 2. Platform filter
+    // 1. Filter out writeups not matching platform / difficulty / status / tag
+    const baseFiltered = allWriteups.filter((w) => {
+      // Platform filter
       if (selectedPlatform !== 'All') {
         if (selectedPlatform === 'HTB Pro Lab' && !w.isProLab && w.platform !== 'HTB Pro Lab') {
           return false;
@@ -76,14 +63,14 @@ export default function WriteupsPage() {
         }
       }
 
-      // 3. Difficulty filter
+      // Difficulty filter
       if (selectedDifficulty !== 'All') {
         if ((w.difficulty || '').toLowerCase() !== selectedDifficulty.toLowerCase()) {
           return false;
         }
       }
 
-      // 4. Status filter
+      // Status filter
       if (selectedStatus === 'pro-lab' && !w.isProLab) {
         return false;
       }
@@ -94,7 +81,7 @@ export default function WriteupsPage() {
         return false;
       }
 
-      // 5. Tag filter (case-insensitive & stripped hash)
+      // Tag filter (case-insensitive & stripped hash)
       if (selectedTag !== 'all') {
         const target = selectedTag.toLowerCase().replace(/^#/, '').trim();
         const hasTag = (w.tags || []).some(
@@ -107,6 +94,81 @@ export default function WriteupsPage() {
 
       return true;
     });
+
+    if (!q) {
+      return baseFiltered;
+    }
+
+    // 2. Score and rank by relevance
+    const scoredList: { writeup: typeof allWriteups[0]; score: number }[] = [];
+
+    for (const w of baseFiltered) {
+      let score = 0;
+      const titleLower = (w.title || '').toLowerCase();
+      const slugLower = (w.slug || '').toLowerCase();
+      const summaryLower = (w.summary || '').toLowerCase();
+      const vectorsLower = `${w.initialAccessVector || ''} ${w.privEscVector || ''}`.toLowerCase();
+      const tagsList = (w.tags || []).map((t) => t.toLowerCase().replace(/^#/, '').trim());
+      const osLower = (w.os || '').toLowerCase();
+      const diffLower = (w.difficulty || '').toLowerCase();
+
+      // Title matches (highest priority!)
+      if (titleLower === q) {
+        score += 2000;
+      } else if (titleLower.startsWith(q)) {
+        score += 1000;
+      } else if (titleLower.includes(q)) {
+        score += 500;
+      }
+
+      // Slug matches
+      if (slugLower === q || slugLower === `htb-${q}`) {
+        score += 1500;
+      } else if (slugLower.startsWith(q) || slugLower.startsWith(`htb-${q}`)) {
+        score += 800;
+      } else if (slugLower.includes(q)) {
+        score += 300;
+      }
+
+      // Exact tag match
+      if (tagsList.includes(q)) {
+        score += 250;
+      } else if (tagsList.some((t) => t.includes(q))) {
+        score += 100;
+      }
+
+      // Summary matches
+      if (summaryLower.includes(q)) {
+        score += 30;
+      }
+
+      // Vectors (foothold / privesc) match
+      if (vectorsLower.includes(q)) {
+        score += 15;
+      }
+
+      // OS / Difficulty match
+      if (osLower === q || diffLower === q) {
+        score += 10;
+      }
+
+      if (score > 0) {
+        scoredList.push({ writeup: w, score });
+      }
+    }
+
+    // Sort by score descending; if score tied, newest date first
+    scoredList.sort((a, b) => {
+      if (b.score !== a.score) {
+        return b.score - a.score;
+      }
+      return (
+        new Date(b.writeup.datePublished || 0).getTime() -
+        new Date(a.writeup.datePublished || 0).getTime()
+      );
+    });
+
+    return scoredList.map((item) => item.writeup);
   }, [allWriteups, searchQuery, selectedPlatform, selectedDifficulty, selectedStatus, selectedTag]);
 
   const hasActiveFilters =
