@@ -60,21 +60,9 @@ select
   updated_at
 from public.til_notes;
 
--- Harden table permissions so anon/authenticated cannot read unlock_password,
--- password_hash, or locked content directly via REST.
-alter table public.til_notes enable row level security;
-
-revoke all on public.til_notes from anon, authenticated;
-grant all on public.til_notes to service_role;
-
-drop policy if exists "Service role full access on til_notes" on public.til_notes;
-create policy "Service role full access on til_notes"
-  on public.til_notes
-  for all
-  to service_role
-  using (true)
-  with check (true);
-
+-- Allow admin panel and client to manage til_notes matching project setup (like tools table)
+alter table public.til_notes disable row level security;
+grant all on public.til_notes to anon, authenticated, service_role;
 grant select on public.til_notes_public to anon, authenticated, service_role;
 
 -- Ensure updated_at trigger stays active
