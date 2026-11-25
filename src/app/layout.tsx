@@ -87,6 +87,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark scroll-smooth" suppressHydrationWarning>
       <head>
+        <link rel="canonical" href="https://0xnullc0de.vercel.app/" />
         <script
           dangerouslySetInnerHTML={{
             __html: `
