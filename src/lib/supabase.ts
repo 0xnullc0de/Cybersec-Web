@@ -206,6 +206,41 @@ export async function getTilNotes(): Promise<TilNote[]> {
   }
 }
 
+/**
+ * Fetch a single TIL / Technique note by slug safely from Supabase.
+ */
+export async function getTilNoteBySlug(slug: string): Promise<TilNote | null> {
+  try {
+    const publicRes = await supabase
+      .from('til_notes_public')
+      .select('*')
+      .eq('slug', slug)
+      .maybeSingle();
+
+    if (!publicRes.error && publicRes.data) {
+      return mapDbToTilNote(publicRes.data);
+    }
+
+    const client = supabaseAdmin || supabase;
+    const { data } = await client
+      .from('til_notes')
+      .select('id, slug, title, category, date, tags, read_time, summary, content, image_urls, is_locked, display_order, created_at, updated_at')
+      .eq('slug', slug)
+      .maybeSingle();
+
+    if (data) {
+      return mapDbToTilNote(data);
+    }
+
+    const fallback = fallbackTilNotes.find((n) => n.slug === slug);
+    return fallback || null;
+  } catch (err) {
+    console.error(`Error querying til_note ${slug} from Supabase:`, err);
+    const fallback = fallbackTilNotes.find((n) => n.slug === slug);
+    return fallback || null;
+  }
+}
+
 // Map database row to Tool type
 export function mapDbToTool(row: any): Tool {
   return {

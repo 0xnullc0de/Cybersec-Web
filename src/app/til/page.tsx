@@ -2,11 +2,25 @@
 
 import React, { useState, useEffect, useMemo, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { tilNotes as fallbackNotes } from '@/data/til';
 import { TilNote } from '@/types';
 import TilCard from '@/components/til/TilCard';
 import SectionHeader from '@/components/ui/SectionHeader';
-import { Search, Filter, X, Terminal, BookOpen, RefreshCw, Lock, Unlock, ShieldAlert } from 'lucide-react';
+import {
+  Search,
+  X,
+  BookOpen,
+  Lock,
+  Unlock,
+  CheckCircle2,
+  LayoutGrid,
+  List,
+  RotateCcw,
+  Calendar,
+  Clock,
+  ArrowRight,
+} from 'lucide-react';
 
 function TilContent({ initialView }: { initialView?: 'all' | 'public' | 'locked' }) {
   const searchParams = useSearchParams();
@@ -20,6 +34,7 @@ function TilContent({ initialView }: { initialView?: 'all' | 'public' | 'locked'
   const [activeTab, setActiveTab] = useState<'all' | 'public' | 'locked'>(defaultTab);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -91,7 +106,7 @@ function TilContent({ initialView }: { initialView?: 'all' | 'public' | 'locked'
   };
 
   return (
-    <div className="pt-24 pb-20 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 space-y-10">
+    <div className="pt-24 pb-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
       {/* Page Header */}
       <SectionHeader
         badge={activeTab === 'locked' ? 'ENCRYPTED INTEL VAULT' : 'PERSISTENT KNOWLEDGE BASE'}
@@ -99,7 +114,7 @@ function TilContent({ initialView }: { initialView?: 'all' | 'public' | 'locked'
         description={
           activeTab === 'locked'
             ? 'Restricted red team tradecraft notes, internal evasion mechanics, and sensitive operational payloads protected by cryptographic passphrases.'
-            : 'A reverse-chronological timeline of offensive attack patterns, Active Directory evasion notes, and pivoting cheatsheets compiled during active research and CTFs.'
+            : 'Offensive security attack patterns, Active Directory evasion techniques, and tooling field notes compiled during research, engagements, and CTFs.'
         }
       />
 
@@ -151,8 +166,32 @@ function TilContent({ initialView }: { initialView?: 'all' | 'public' | 'locked'
           </button>
         </div>
 
-        <div className="text-right px-3 text-xs font-mono text-gray-500 hidden sm:block">
-          STATUS: <span className="text-[#00ff66]">ONLINE &bull; SUPABASE SYNCED</span>
+        {/* View Mode Toggle: Grid vs List */}
+        <div className="flex items-center justify-end gap-2 px-2">
+          <div className="flex items-center p-1 bg-[#0b1218] rounded-lg border border-[#1b2631]">
+            <button
+              onClick={() => setViewMode('grid')}
+              className={`p-1.5 rounded transition-colors ${
+                viewMode === 'grid'
+                  ? 'bg-[#00ff66]/15 text-[#00ff66]'
+                  : 'text-gray-400 hover:text-white'
+              }`}
+              title="Grid View"
+            >
+              <LayoutGrid className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              className={`p-1.5 rounded transition-colors ${
+                viewMode === 'list'
+                  ? 'bg-[#00ff66]/15 text-[#00ff66]'
+                  : 'text-gray-400 hover:text-white'
+              }`}
+              title="List View"
+            >
+              <List className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -208,13 +247,71 @@ function TilContent({ initialView }: { initialView?: 'all' | 'public' | 'locked'
         </div>
       </div>
 
-      {/* Timeline Feed Container */}
+      {/* Grid or List Cards Container */}
       {filteredNotes.length > 0 ? (
-        <div className="space-y-2 relative pt-4">
-          {filteredNotes.map((note) => (
-            <TilCard key={note.id} note={note} />
-          ))}
-        </div>
+        viewMode === 'grid' ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredNotes.map((note) => (
+              <TilCard key={note.id || note.slug} note={note} />
+            ))}
+          </div>
+        ) : (
+          /* List View */
+          <div className="space-y-3">
+            {filteredNotes.map((note) => (
+              <Link
+                key={note.id || note.slug}
+                href={`/til/${note.slug}`}
+                className="group flex flex-col md:flex-row md:items-center justify-between p-4 rounded-xl bg-[#0a0f14] border border-[#1b2631] hover:border-[#00ff66]/60 hover:bg-[#0e161d] transition-all gap-4 shadow-sm"
+              >
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded text-[11px] font-mono font-semibold bg-[#00ff66]/10 text-[#00ff66] border border-[#00ff66]/25">
+                      {note.category}
+                    </span>
+                    {note.isLocked ? (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-mono text-amber-400">
+                        <Lock className="w-3.5 h-3.5" />
+                        <span>Locked</span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-mono text-emerald-400">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span>Public</span>
+                      </span>
+                    )}
+                  </div>
+
+                  <div>
+                    <h3 className="font-mono text-base font-bold text-white group-hover:text-[#00ff66] transition-colors">
+                      {note.title}
+                    </h3>
+                    {note.summary && (
+                      <p className="text-gray-400 text-xs line-clamp-1 max-w-xl font-sans">
+                        {note.summary}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between sm:justify-end gap-4 font-mono text-xs text-gray-500">
+                  <div className="flex items-center gap-1">
+                    <Calendar className="w-3.5 h-3.5" />
+                    <span>{note.date}</span>
+                  </div>
+                  <span>&bull;</span>
+                  <div className="flex items-center gap-1">
+                    <Clock className="w-3.5 h-3.5" />
+                    <span>{note.readTime}</span>
+                  </div>
+                  <span className="text-[#00ff66] font-semibold flex items-center gap-1">
+                    Read &rarr;
+                  </span>
+                </div>
+              </Link>
+            ))}
+          </div>
+        )
       ) : (
         <div className="text-center py-16 p-8 rounded-2xl bg-[#0a0f14] border border-[#1b2631]">
           {activeTab === 'locked' ? (
@@ -236,14 +333,15 @@ function TilContent({ initialView }: { initialView?: 'all' | 'public' | 'locked'
                 setSearchQuery('');
                 setSelectedCategory('All');
               }}
-              className="px-4 py-1.5 rounded bg-[#00ff66] text-black font-mono text-xs font-bold uppercase"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#00ff66] text-black font-mono font-bold text-xs uppercase"
             >
-              Reset Filters
+              <RotateCcw className="w-4 h-4" />
+              <span>Reset Filters</span>
             </button>
             {activeTab === 'locked' && (
               <button
                 onClick={() => handleTabChange('all')}
-                className="px-4 py-1.5 rounded bg-[#15212d] text-white font-mono text-xs font-semibold uppercase border border-[#2a3c4f]"
+                className="px-4 py-2 rounded-lg bg-[#15212d] text-white font-mono text-xs font-semibold uppercase border border-[#2a3c4f]"
               >
                 View All Techniques
               </button>
@@ -257,13 +355,8 @@ function TilContent({ initialView }: { initialView?: 'all' | 'public' | 'locked'
 
 export default function TilPage() {
   return (
-    <Suspense fallback={
-      <div className="pt-32 pb-20 max-w-5xl mx-auto px-4 text-center font-mono text-xs text-gray-500">
-        INITIALISING OFFENSIVE KNOWLEDGE VAULT...
-      </div>
-    }>
+    <Suspense fallback={<div className="pt-32 text-center font-mono text-xs text-gray-500">LOADING TECHNIQUES...</div>}>
       <TilContent />
     </Suspense>
   );
 }
-
