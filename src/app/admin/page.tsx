@@ -71,6 +71,8 @@ export default function AdminPage() {
   const [showNoteAiModal, setShowNoteAiModal] = useState(false);
   const [noteCustomDirectives, setNoteCustomDirectives] = useState<string>('');
   const [showNotionNotesHub, setShowNotionNotesHub] = useState(false);
+  const [isRefreshingNotes, setIsRefreshingNotes] = useState(false);
+  const [directNoteInput, setDirectNoteInput] = useState('');
 
   const [importConfig, setImportConfig] = useState({
     title: '',
@@ -187,13 +189,21 @@ export default function AdminPage() {
     }
   };
 
-  const fetchNotionNotes = async (key: string, customToken?: string) => {
+  const fetchNotionNotes = async (key: string, customToken?: string, directTarget?: string) => {
+    setIsRefreshingNotes(true);
     try {
       const headers: Record<string, string> = { 'x-admin-key': key };
-      const token = customToken !== undefined ? customToken : (notionNotesCustomKey || localStorage.getItem('notion_notes_api_key') || '');
-      if (token) {
-        headers['x-notion-notes-key'] = token;
+      const token = customToken !== undefined
+        ? customToken
+        : (notionNotesCustomKey || (typeof window !== 'undefined' ? localStorage.getItem('notion_notes_api_key') : '') || '');
+
+      if (!token) {
+        setMessage({ type: 'error', text: 'Please paste your Notion Notes API key and click Connect.' });
+        setIsRefreshingNotes(false);
+        return;
       }
+
+      headers['x-notion-notes-key'] = token;
 
       const sRes = await fetch('/api/admin/notion-notes/status', { headers });
       if (sRes.ok) {
@@ -201,13 +211,56 @@ export default function AdminPage() {
         setNotionNotesStatus(sData);
       }
 
-      const pRes = await fetch('/api/admin/notion-notes/pages', { headers });
+      const pagesUrl = directTarget
+        ? `/api/admin/notion-notes/pages?target=${encodeURIComponent(directTarget)}`
+        : '/api/admin/notion-notes/pages';
+
+      const pRes = await fetch(pagesUrl, { headers });
+      const pData = await pRes.json();
+
       if (pRes.ok) {
-        const pData = await pRes.json();
-        setNotionNotesPages(pData.pages || []);
+        const pages = pData.pages || [];
+        setNotionNotesPages(pages);
+        setShowNotionNotesHub(true);
+
+        if (pages.length > 0) {
+          setMessage({
+            type: 'success',
+            text: directTarget
+              ? `Found note: "${pages[0].title}"!`
+              : `Discovered ${pages.length} note(s) from Notion Notes workspace!`,
+          });
+          if (directTarget && pages[0]) {
+            setSelectedNotionNotePage(pages[0]);
+            setNoteImportConfig({
+              title: pages[0].title,
+              slug: (pages[0].title || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
+              category: pages[0].category || 'Active Directory',
+              tags: Array.isArray(pages[0].tags) ? pages[0].tags.join(', ') : (pages[0].tags || 'Active Directory, CTF'),
+              readTime: '4 min read',
+              summary: `${pages[0].title} offensive tradecraft notes and technique breakdown.`,
+              content: '',
+              isLocked: false,
+              unlockPassword: `VAULT{${(pages[0].title || 'Note').replace(/[^a-zA-Z0-9]/g, '')}_${Math.random().toString(16).substring(2, 8).toUpperCase()}!}`,
+            });
+          }
+        } else {
+          setMessage({
+            type: 'error',
+            text: 'Notion search returned 0 pages. You can paste the note page URL or ID directly below to fetch it instantly!',
+          });
+        }
+      } else {
+        setMessage({
+          type: 'error',
+          text: pData.error || 'Failed to fetch Notion pages. Please verify your Notion Notes API token.',
+        });
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to fetch Notion Notes:', err);
+      setMessage({ type: 'error', text: err.message || 'Error connecting to Notion' });
+    } finally {
+      setIsRefreshingNotes(false);
     }
   };
 
@@ -1892,16 +1945,17 @@ export default function AdminPage() {
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => fetchNotionNotes(adminKey)}
-                    className="px-3.5 py-1.5 bg-[#121921] hover:bg-cyan-500/15 border border-[#22313f] hover:border-cyan-500/40 text-cyan-400 text-xs font-mono rounded-lg transition-all flex items-center gap-1.5"
+                    disabled={isRefreshingNotes}
+                    onClick={() => fetchNotionNotes(adminKey, notionNotesCustomKey)}
+                    className="px-3.5 py-1.5 bg-[#121921] hover:bg-cyan-500/15 border border-[#22313f] hover:border-cyan-500/40 text-cyan-400 text-xs font-mono rounded-lg transition-all flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
                   >
-                    <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-                    Refresh Notes
+                    <RefreshCw className={`w-3.5 h-3.5 ${isRefreshingNotes ? 'animate-spin' : ''}`} />
+                    {isRefreshingNotes ? 'Refreshing...' : 'Refresh Notes'}
                   </button>
                   <button
                     type="button"
                     onClick={() => setShowNotionNotesHub(!showNotionNotesHub)}
-                    className="px-3.5 py-1.5 bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/40 text-cyan-300 text-xs font-mono font-bold rounded-lg transition-all flex items-center gap-1.5"
+                    className="px-3.5 py-1.5 bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/40 text-cyan-300 text-xs font-mono font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer"
                   >
                     <Sparkles className="w-3.5 h-3.5" />
                     {showNotionNotesHub ? 'Hide Pages' : `Import Notion Notes (${notionNotesPages.length})`}
@@ -1927,10 +1981,42 @@ export default function AdminPage() {
                   />
                   <button
                     type="button"
+                    disabled={isRefreshingNotes}
                     onClick={() => fetchNotionNotes(adminKey, notionNotesCustomKey)}
-                    className="px-2.5 py-1 bg-cyan-500/20 text-cyan-300 rounded border border-cyan-500/30 hover:bg-cyan-500/30"
+                    className="px-2.5 py-1 bg-cyan-500/20 text-cyan-300 rounded border border-cyan-500/30 hover:bg-cyan-500/30 font-bold transition-all disabled:opacity-50"
                   >
-                    Connect
+                    {isRefreshingNotes ? 'Connecting...' : 'Connect'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Direct Page Import Bar (Instantly bypasses search latency) */}
+              <div className="pt-2 border-t border-[#17222c] flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 text-xs font-mono">
+                <span className="text-gray-400 flex items-center gap-1.5">
+                  <ExternalLink className="w-3.5 h-3.5 text-cyan-400" />
+                  Direct Import by Notion URL or Page ID (e.g. from your SSFR note):
+                </span>
+                <div className="flex items-center gap-2 flex-1 max-w-lg">
+                  <input
+                    type="text"
+                    value={directNoteInput}
+                    onChange={(e) => setDirectNoteInput(e.target.value)}
+                    placeholder="Paste Notion page URL or 32-char ID..."
+                    className="flex-1 bg-[#06090c] border border-[#1b2631] rounded px-2.5 py-1 text-xs font-mono text-white placeholder-gray-600 focus:outline-none focus:border-cyan-400"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && directNoteInput.trim()) {
+                        fetchNotionNotes(adminKey, notionNotesCustomKey, directNoteInput.trim());
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    disabled={isRefreshingNotes || !directNoteInput.trim()}
+                    onClick={() => fetchNotionNotes(adminKey, notionNotesCustomKey, directNoteInput.trim())}
+                    className="px-3 py-1 bg-cyan-500 hover:bg-cyan-400 text-black font-bold rounded text-xs transition-all flex items-center gap-1 shrink-0 disabled:opacity-50"
+                  >
+                    {isRefreshingNotes ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
+                    Fetch &amp; Import
                   </button>
                 </div>
               </div>

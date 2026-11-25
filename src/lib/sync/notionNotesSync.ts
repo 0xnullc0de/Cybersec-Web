@@ -336,82 +336,141 @@ export async function getNotesNotionStatus(customToken?: string | null) {
   }
 }
 
+export function extractNotionIdFromUrlOrString(input: string): string {
+  const clean = input.trim();
+  // Match standard 32-character Notion page id (with or without dashes)
+  const match = clean.match(/([a-f0-9]{32}|[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i);
+  if (match) {
+    return match[1].replace(/-/g, '');
+  }
+  return clean;
+}
+
 export async function listNotionNotesPages(customToken?: string | null): Promise<any[]> {
   const token = getNotesNotionToken(customToken);
   if (!token) return [];
 
   const notion = new Client({ auth: token });
-  try {
-    const allPages: any[] = [];
-    let cursor: string | undefined = undefined;
+  const allPages: any[] = [];
+  let cursor: string | undefined = undefined;
 
-    do {
-      const searchRes: any = await notion.search({
-        filter: { property: 'object', value: 'page' },
-        page_size: 100,
-        start_cursor: cursor,
-      });
-      allPages.push(...searchRes.results);
-      cursor = searchRes.has_more ? searchRes.next_cursor : undefined;
-    } while (cursor);
+  // Search without strict filter so both Pages and Databases are discovered
+  do {
+    const searchRes: any = await notion.search({
+      page_size: 100,
+      start_cursor: cursor,
+    });
 
-    const titleMap = new Map<string, string>();
-    const parentIds = new Set<string>();
-
-    for (const page of allPages) {
-      titleMap.set(page.id, extractPageTitle(page));
-      if (page.parent?.type === 'page_id' && page.parent.page_id) {
-        parentIds.add(page.parent.page_id);
+    for (const item of searchRes.results || []) {
+      if (item.object === 'page') {
+        allPages.push(item);
+      } else if (item.object === 'database') {
+        // If a database is shared, query its rows (pages inside the database)
+        try {
+          const dbQuery: any = await (notion as any).request({
+            path: `databases/${item.id}/query`,
+            method: 'post',
+            body: { page_size: 100 },
+          });
+          if (Array.isArray(dbQuery.results) && dbQuery.results.length > 0) {
+            allPages.push(...dbQuery.results);
+          } else {
+            // Also include the database itself so the user sees it
+            allPages.push(item);
+          }
+        } catch (_) {
+          allPages.push(item);
+        }
       }
     }
 
-    return allPages.map((page: any) => {
-      const title = titleMap.get(page.id) || 'Untitled Note';
-      const props = page.properties || {};
-      const parentTitle =
-        page.parent?.type === 'page_id' ? titleMap.get(page.parent.page_id) || null : null;
+    cursor = searchRes.has_more ? searchRes.next_cursor : undefined;
+  } while (cursor);
 
-      // Category inference: Database select property -> parent folder title -> 'Tooling'
-      let category =
-        props.Category?.select?.name ||
-        props.category?.select?.name ||
-        (parentTitle ? parentTitle.replace(/^[^\w\s]+/, '').trim() : '') ||
-        'Tooling';
+  const titleMap = new Map<string, string>();
+  const parentIds = new Set<string>();
 
-      if (!category) category = 'Tooling';
-
-      const propTags =
-        props.Tags?.multi_select?.map((t: any) => t.name) ||
-        props.tags?.multi_select?.map((t: any) => t.name) ||
-        [];
-
-      const propLocked = Boolean(
-        props.Locked?.checkbox ??
-        props.locked?.checkbox ??
-        /locked|vault|private/i.test(parentTitle || '')
-      );
-
-      // Workspace-level pages that act as parent folders for child notes
-      const isContainer =
-        page.parent?.type === 'workspace' && parentIds.has(page.id);
-
-      return {
-        id: page.id,
-        title,
-        category,
-        tags: propTags,
-        suggestedLocked: propLocked,
-        isContainer,
-        parentTitle,
-        createdTime: page.created_time,
-        lastEditedTime: page.last_edited_time,
-        url: page.url,
-      };
-    });
-  } catch (err: any) {
-    console.error('listNotionNotesPages error:', err);
-    return [];
+  for (const page of allPages) {
+    titleMap.set(page.id, extractPageTitle(page));
+    if (page.parent?.type === 'page_id' && page.parent.page_id) {
+      parentIds.add(page.parent.page_id);
+    }
   }
+
+  return allPages.map((page: any) => {
+    const title = titleMap.get(page.id) || extractPageTitle(page) || 'Untitled Note';
+    const props = page.properties || {};
+    const parentTitle =
+      page.parent?.type === 'page_id' ? titleMap.get(page.parent.page_id) || null : null;
+
+    // Category inference: Database select property -> parent folder title -> 'Tooling'
+    let category =
+      props.Category?.select?.name ||
+      props.category?.select?.name ||
+      (parentTitle ? parentTitle.replace(/^[^\w\s]+/, '').trim() : '') ||
+      'Tooling';
+
+    if (!category) category = 'Tooling';
+
+    const propTags =
+      props.Tags?.multi_select?.map((t: any) => t.name) ||
+      props.tags?.multi_select?.map((t: any) => t.name) ||
+      [];
+
+    const propLocked = Boolean(
+      props.Locked?.checkbox ??
+      props.locked?.checkbox ??
+      /locked|vault|private/i.test(parentTitle || '')
+    );
+
+    // Workspace-level pages that act as parent folders for child notes
+    const isContainer =
+      page.parent?.type === 'workspace' && parentIds.has(page.id);
+
+    return {
+      id: page.id,
+      title,
+      category,
+      tags: propTags,
+      suggestedLocked: propLocked,
+      isContainer,
+      parentTitle,
+      createdTime: page.created_time,
+      lastEditedTime: page.last_edited_time,
+      url: page.url,
+    };
+  });
+}
+
+export async function fetchSingleNotionNote(pageIdOrUrl: string, customToken?: string | null) {
+  const token = getNotesNotionToken(customToken);
+  if (!token) throw new Error('Notes Notion integration token is not configured.');
+
+  const pageId = extractNotionIdFromUrlOrString(pageIdOrUrl);
+  const notion = new Client({ auth: token });
+  const page: any = await notion.pages.retrieve({ page_id: pageId });
+  const title = extractPageTitle(page);
+  const props = page.properties || {};
+
+  let category =
+    props.Category?.select?.name ||
+    props.category?.select?.name ||
+    'Tooling';
+
+  const tags =
+    props.Tags?.multi_select?.map((t: any) => t.name) ||
+    props.tags?.multi_select?.map((t: any) => t.name) ||
+    [];
+
+  return {
+    id: page.id,
+    title,
+    category,
+    tags,
+    url: page.url,
+    createdTime: page.created_time,
+    lastEditedTime: page.last_edited_time,
+  };
 }
 
 export async function fetchRawNotionNoteMarkdown(pageId: string, customToken?: string | null) {

@@ -13,7 +13,17 @@ export async function GET(request: Request) {
     }
 
     const customToken = request.headers.get('x-notion-notes-key');
-    const pages = await listNotionNotesPages(customToken);
+    const { searchParams } = new URL(request.url);
+    const target = searchParams.get('target');
+
+    let pages: any[] = [];
+    if (target) {
+      const { fetchSingleNotionNote } = await import('@/lib/sync/notionNotesSync');
+      const single = await fetchSingleNotionNote(target, customToken);
+      pages = [single];
+    } else {
+      pages = await listNotionNotesPages(customToken);
+    }
 
     const client = supabaseAdmin || supabase;
     const { data: existing } = await client
