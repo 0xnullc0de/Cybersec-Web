@@ -1,10 +1,10 @@
 import { SiteConfig } from "@/types";
 
 export const siteConfig: SiteConfig = {
-  name: "Max 'Nullbyt3'",
-  handle: "Nullbyt3",
+  name: "0xnullc0de (Maxwell Wachira)",
+  handle: "0xnullc0de",
   role: "Offensive Security Practitioner & Red Team Researcher",
-  bio: "Specializing in Active Directory attack paths, internal network penetration testing, and web exploitation. Documenting adversary tradecraft and CTF machine writeups with zero fluff.",
+  bio: "0xnullc0de (Maxwell Wachira / Nullbyt3) - Offensive security researcher specializing in Active Directory attack paths, internal network penetration testing, and web exploitation. Documenting adversary tradecraft and CTF machine writeups with zero fluff.",
   statusBadge: "Active Offensive Security Researcher & CTF Competitor",
   socials: {
     github: "https://github.com/0xnullc0de",

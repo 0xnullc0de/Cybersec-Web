@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { Copy, Check, Terminal, Command, ExternalLink, Image as ImageIcon, CheckCheck } from 'lucide-react';
 import { slugifyHeading } from './TableOfContents';
+import MermaidDiagram from '@/components/ui/MermaidDiagram';
 
 interface MarkdownRendererProps {
   content: string;
@@ -78,6 +79,10 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
 
           const isExplicitCommand = fullLang.includes(':command') || fullLang.includes(':terminal');
           const lang = fullLang.split(':')[0] || 'bash';
+
+          if (lang.toLowerCase() === 'mermaid' || lang.toLowerCase() === 'diagram') {
+            return <MermaidDiagram key={index} chart={rawCode} />;
+          }
 
           return (
             <div

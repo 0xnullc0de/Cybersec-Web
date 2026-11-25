@@ -57,5 +57,25 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     console.error('Error generating sitemap writeups:', e);
   }
 
+  // Dynamic TIL notes from database
+  try {
+    const { data: dbNotes } = await supabase
+      .from('til_notes_public')
+      .select('slug, updated_at, date');
+
+    if (dbNotes && dbNotes.length > 0) {
+      dbNotes.forEach((n: any) => {
+        routes.push({
+          url: `${baseUrl}/til/${n.slug}`,
+          lastModified: n.updated_at ? new Date(n.updated_at) : (n.date ? new Date(n.date) : new Date()),
+          changeFrequency: 'weekly',
+          priority: 0.8,
+        });
+      });
+    }
+  } catch (e) {
+    console.error('Error generating sitemap til notes:', e);
+  }
+
   return routes;
 }

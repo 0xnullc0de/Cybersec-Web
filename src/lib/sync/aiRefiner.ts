@@ -229,10 +229,14 @@ os: <Windows | Linux>
      * Root / Administrator Flag capture
    - You MUST retain EVERY SINGLE image token (\`![Caption](%%NOTION_IMAGE_X%%)\`) in its exact logical place.
 
-6. **FACTUAL ACCURACY**:
+6. **ARCHITECTURE & PROTOCOL FLOW DIAGRAMS**:
+   - Whenever explaining complex authentication handshakes (e.g. Kerberos AS-REQ/AS-REP -> TGS-REQ/TGS-REP -> AP-REQ, NTLM relay, OAuth, SAML), network pivoting topologies (e.g. Chisel / Proxychains / SSH tunnels), or multi-stage exploit chains, **INCLUDE A CLEAN, VALID MERMAID DIAGRAM** using \`\`\`mermaid ... \`\`\` (e.g. \`sequenceDiagram\` or \`flowchart TD\`).
+   - Keep Mermaid syntax valid, clean, and concise with clear participant and step names.
+
+7. **FACTUAL ACCURACY**:
    - Retain all actual IPs, hostnames, usernames, passwords, hashes, tokens, and flags verbatim from the raw notes.
 
-7. **OUTPUT FORMAT**:
+8. **OUTPUT FORMAT**:
    - Output ONLY the YAML frontmatter block followed immediately by the clean Markdown walkthrough ready for publication. Do not add chat greetings or closing remarks.`;
 }
 
@@ -470,7 +474,11 @@ summary: <1-2 engaging sentences capturing what this technique does and why it m
 - **NEVER truncate or summarize terminal outputs with "..."**! Keep full command flags and outputs verbatim.
 - Follow each code block or script with a sharp explanation of what every important flag/line does.
 
-### 5. OUTPUT FORMAT:
+### 5. ARCHITECTURE & PROTOCOL FLOW DIAGRAMS:
+- Whenever explaining multi-step authentication handshakes (e.g. Kerberos AS-REQ/AS-REP -> TGS-REQ/TGS-REP -> AP-REQ, NTLM relay, OAuth, SAML, DPAPI masterkey flow), network pivoting topologies (e.g. Chisel / Proxychains / SSH tunnels), or attack lifecycles, **YOU MUST INCLUDE A CLEAN, VALID MERMAID DIAGRAM** using \`\`\`mermaid ... \`\`\` (e.g. \`sequenceDiagram\` or \`flowchart TD\`).
+- Ensure the Mermaid syntax is clean and error-free with clear participant/node names and step labels.
+
+### 6. OUTPUT FORMAT:
 - Output ONLY the YAML frontmatter block followed immediately by clean, publication-ready Markdown. No chat preamble.`;
 }
 

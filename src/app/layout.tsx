@@ -16,6 +16,16 @@ export const metadata: Metadata = {
   },
   description: siteConfig.bio,
   keywords: [
+    "0xnullc0de",
+    "0xnullcode",
+    "0xnulllc0de",
+    "nullc0de",
+    "nullcode",
+    "Maxwell Wachira",
+    "Maxwell Wachira cybersecurity",
+    "0xnullc0de writeups",
+    "0xnullcode writeups",
+    "Nullbyt3",
     "offensive security",
     "hackthebox writeups",
     "tryhackme writeups",
@@ -25,24 +35,27 @@ export const metadata: Metadata = {
     "OSCP",
     "CRTO",
     "HTB Pro Labs",
-    "Nullbyt3",
     "CTF walkthroughs",
   ],
-  authors: [{ name: siteConfig.name, url: siteUrl }],
-  creator: siteConfig.handle,
+  authors: [{ name: "0xnullc0de (Maxwell Wachira)", url: siteUrl }],
+  creator: "0xnullc0de",
+  publisher: "0xnullc0de",
+  alternates: {
+    canonical: siteUrl,
+  },
   openGraph: {
     type: "website",
     locale: "en_US",
     url: siteUrl,
     title: `${siteConfig.name} | Offensive Security & CTF Writeup Vault`,
     description: siteConfig.bio,
-    siteName: `${siteConfig.handle} Security Vault`,
+    siteName: "0xnullc0de Security Vault",
   },
   twitter: {
     card: "summary_large_image",
     title: `${siteConfig.name} | Offensive Security Vault`,
     description: siteConfig.bio,
-    creator: "@Nullbyt3_sec",
+    creator: "@MaxwellWac79412",
   },
   robots: {
     index: true,
@@ -92,6 +105,43 @@ export default function RootLayout({
                 }
               })();
             `,
+          }}
+        />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@graph": [
+                {
+                  "@type": "WebSite",
+                  "@id": `${siteUrl}/#website`,
+                  "url": siteUrl,
+                  "name": "0xnullc0de | Offensive Security & CTF Vault",
+                  "alternateName": ["0xnullcode", "0xnulllc0de", "0xnullc0de Vault", "0xnullc0de.github.io"],
+                  "description": siteConfig.bio,
+                  "publisher": {
+                    "@id": `${siteUrl}/#person`
+                  }
+                },
+                {
+                  "@type": "Person",
+                  "@id": `${siteUrl}/#person`,
+                  "name": "Maxwell Wachira",
+                  "alternateName": ["0xnullc0de", "0xnullcode", "0xnulllc0de", "Nullbyt3"],
+                  "url": siteUrl,
+                  "jobTitle": "Offensive Security Practitioner & Red Team Researcher",
+                  "sameAs": [
+                    "https://github.com/0xnullc0de",
+                    "https://0xnullc0de.github.io",
+                    "https://www.linkedin.com/in/maxwell-wachira-05b991344/",
+                    "https://x.com/MaxwellWac79412",
+                    "https://app.hackthebox.com/users/2029291",
+                    "https://tryhackme.com/p/Nullbyt3"
+                  ]
+                }
+              ]
+            })
           }}
         />
       </head>
