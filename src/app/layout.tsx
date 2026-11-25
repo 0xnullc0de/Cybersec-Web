@@ -5,7 +5,7 @@ import Footer from "@/components/layout/Footer";
 import { siteConfig } from "@/data/siteConfig";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || (
-  process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://nullbyte.vercel.app'
+  process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://0xnullc0de.vercel.app'
 );
 
 export const metadata: Metadata = {

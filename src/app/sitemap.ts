@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || (
-    process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://nullbyte.vercel.app'
+    process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://0xnullc0de.vercel.app'
   );
 
   // Core public routes
