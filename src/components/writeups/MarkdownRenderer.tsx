@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { Copy, Check, Terminal, Command, ExternalLink, Image as ImageIcon, CheckCheck } from 'lucide-react';
 import { slugifyHeading } from './TableOfContents';
 import MermaidDiagram from '@/components/ui/MermaidDiagram';
+import ImageLightbox from '@/components/ui/ImageLightbox';
 
 interface MarkdownRendererProps {
   content: string;
@@ -11,6 +12,8 @@ interface MarkdownRendererProps {
 
 export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+  const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null);
+
 
   const copyToClipboard = (text: string, index: number) => {
     // Clean prompt symbols like leading '$ ', '# ', or '> ' for seamless terminal pasting
@@ -43,6 +46,7 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
   let codeBlockCounter = 0;
 
   return (
+    <>
     <div className="space-y-6 font-sans text-gray-300 leading-relaxed text-sm sm:text-base">
       {parts.map((part, index) => {
         if (!part) return null;
@@ -217,7 +221,9 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
                       src={imgUrl}
                       alt={altText}
                       loading="lazy"
-                      className="w-full h-auto rounded-lg border border-[#151f28] object-contain print:max-h-[75vh]"
+                      onClick={() => setLightbox({ src: imgUrl, alt: altText })}
+                      className="w-full h-auto rounded-lg border border-[#151f28] object-contain print:max-h-[75vh] cursor-zoom-in hover:brightness-110 transition-all duration-200"
+                      title="Click to open fullscreen viewer"
                     />
                     {trailingText && (
                       <p className="text-xs font-mono text-gray-400 mt-2.5 px-2 italic border-t border-[#151f28] pt-2">
@@ -338,6 +344,14 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
         );
       })}
     </div>
+    {lightbox && (
+      <ImageLightbox
+        src={lightbox.src}
+        alt={lightbox.alt}
+        onClose={() => setLightbox(null)}
+      />
+    )}
+    </>
   );
 }
 
